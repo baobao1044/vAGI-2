@@ -5,7 +5,7 @@
 //!
 //! Replaces O(n²) full attention with O(1) attention over constant-size context.
 
-use vagi_hdc::{HDCEncoder, HDCMemory, HyperVector, MemoryConfig};
+use vagi_hdc::{HDCEncoder, HDCMemory, MemoryConfig};
 
 /// Configuration for two-phase attention.
 #[derive(Clone, Debug)]

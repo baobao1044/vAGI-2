@@ -36,7 +36,7 @@ pub struct TernaryMatrix {
 impl TernaryMatrix {
     /// Create a zero matrix.
     pub fn zeros(rows: usize, cols: usize) -> Self {
-        let cols_padded = (cols + WEIGHTS_PER_U64 - 1) / WEIGHTS_PER_U64 * WEIGHTS_PER_U64;
+        let cols_padded = cols.div_ceil(WEIGHTS_PER_U64) * WEIGHTS_PER_U64;
         let u64s_per_row = cols_padded / WEIGHTS_PER_U64;
         Self {
             data: vec![0u64; rows * u64s_per_row],
@@ -60,7 +60,7 @@ impl TernaryMatrix {
     /// scale = mean(|W_nonzero|) for reconstruction.
     pub fn pack(weights: &[f32], rows: usize, cols: usize, gamma: f32) -> Self {
         assert_eq!(weights.len(), rows * cols, "Weight count mismatch");
-        let cols_padded = (cols + WEIGHTS_PER_U64 - 1) / WEIGHTS_PER_U64 * WEIGHTS_PER_U64;
+        let cols_padded = cols.div_ceil(WEIGHTS_PER_U64) * WEIGHTS_PER_U64;
         let u64s_per_row = cols_padded / WEIGHTS_PER_U64;
         let mut data = vec![0u64; rows * u64s_per_row];
         let mut scale = vec![1.0f32; rows];
@@ -110,7 +110,7 @@ impl TernaryMatrix {
     /// Pack from pre-quantized ternary values (i8: -1, 0, +1).
     pub fn from_ternary(ternary: &[i8], rows: usize, cols: usize) -> Self {
         assert_eq!(ternary.len(), rows * cols);
-        let cols_padded = (cols + WEIGHTS_PER_U64 - 1) / WEIGHTS_PER_U64 * WEIGHTS_PER_U64;
+        let cols_padded = cols.div_ceil(WEIGHTS_PER_U64) * WEIGHTS_PER_U64;
         let u64s_per_row = cols_padded / WEIGHTS_PER_U64;
         let mut data = vec![0u64; rows * u64s_per_row];
 

@@ -108,7 +108,7 @@ impl CausalGraph {
 
     /// Check if the graph is a valid DAG (no cycles).
     pub fn is_dag(&self) -> bool {
-        algo::is_cyclic_directed(&self.graph) == false
+        !algo::is_cyclic_directed(&self.graph)
     }
 
     /// Topological sort — returns labels in causal order.

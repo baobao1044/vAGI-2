@@ -73,6 +73,7 @@ pub struct HDCMemory {
     /// Auto-incrementing ID counter.
     next_id: u64,
     /// Configuration.
+    #[allow(dead_code)]
     config: MemoryConfig,
 }
 

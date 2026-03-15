@@ -81,7 +81,7 @@ impl OODALoop {
     /// 3. **Decide**: route through MoE experts, gate output
     /// 4. **Act**: return processed output
     pub fn cycle(&mut self, input: &[f32]) -> (Vec<f32>, CycleMetrics) {
-        let d = self.config.d_model;
+        let _d = self.config.d_model;
 
         // 1. Observe: update streaming state
         self.state.update(input);

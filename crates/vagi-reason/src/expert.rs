@@ -3,7 +3,7 @@
 //! Each expert is an AdaptiveBlock (BitNetLinear + AdaptiveBasis).
 //! Only top-K experts run per input → sparse compute.
 
-use vagi_core::{AdaptiveBlock, BasisConfig};
+use vagi_core::AdaptiveBlock;
 use crate::router::{EnergyRouter, RouterConfig};
 
 /// Configuration for the expert pool.
