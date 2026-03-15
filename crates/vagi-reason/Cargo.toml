@@ -1,0 +1,15 @@
+[package]
+name = "vagi-reason"
+version = "0.1.0"
+edition = "2021"
+description = "Reasoning engine — MoE + predictive coding for vAGI v2"
+
+[dependencies]
+vagi-core = { path = "../vagi-core" }
+vagi-memory = { path = "../vagi-memory" }
+vagi-math = { path = "../vagi-math" }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+approx = { workspace = true }

@@ -1,0 +1,14 @@
+[package]
+name = "vagi-memory"
+version = "0.1.0"
+edition = "2021"
+description = "Hierarchical memory pyramid for vAGI v2"
+
+[dependencies]
+vagi-core = { path = "../vagi-core" }
+vagi-hdc = { path = "../vagi-hdc" }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+approx = { workspace = true }

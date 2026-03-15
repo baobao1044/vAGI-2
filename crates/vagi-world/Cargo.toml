@@ -1,0 +1,16 @@
+[package]
+name = "vagi-world"
+version = "0.1.0"
+edition = "2021"
+description = "World model & causal engine for vAGI v2"
+
+[dependencies]
+vagi-core = { path = "../vagi-core" }
+vagi-reason = { path = "../vagi-reason" }
+vagi-physics = { path = "../vagi-physics" }
+petgraph = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+approx = { workspace = true }

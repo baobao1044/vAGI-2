@@ -1,0 +1,19 @@
+[package]
+name = "vagi-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "OODA loop + orchestrator for vAGI v2"
+
+[dependencies]
+vagi-core = { path = "../vagi-core" }
+vagi-hdc = { path = "../vagi-hdc" }
+vagi-math = { path = "../vagi-math" }
+vagi-physics = { path = "../vagi-physics" }
+vagi-memory = { path = "../vagi-memory" }
+vagi-reason = { path = "../vagi-reason" }
+vagi-world = { path = "../vagi-world" }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+approx = { workspace = true }

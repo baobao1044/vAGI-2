@@ -1,0 +1,17 @@
+[package]
+name = "vagi-core"
+version = "0.1.0"
+edition = "2021"
+description = "BitNet ops, tensor primitives, SIMD — foundation layer for vAGI v2"
+
+[dependencies]
+rand = { workspace = true }
+serde = { workspace = true }
+safetensors = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+approx = { workspace = true }
+proptest = { workspace = true }
+criterion = { workspace = true }

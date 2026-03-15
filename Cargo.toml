@@ -1,0 +1,65 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/vagi-core",
+    "crates/vagi-hdc",
+    "crates/vagi-math",
+    "crates/vagi-physics",
+    "crates/vagi-memory",
+    "crates/vagi-reason",
+    "crates/vagi-world",
+    "crates/vagi-runtime",
+    "crates/vagi-train",
+]
+
+[workspace.dependencies]
+# Core
+rayon = "1.10"
+crossbeam = "0.8"
+
+# Storage
+redb = "2.0"
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# Graph
+petgraph = "0.6"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+safetensors = "0.4"
+
+# SIMD
+wide = "0.7"
+
+# JIT & Sandbox
+cranelift = "0.110"
+wasmtime = "23.0"
+
+# Python interop
+pyo3 = { version = "0.22", features = ["extension-module"] }
+
+# Testing
+criterion = "0.5"
+proptest = "1.5"
+approx = "0.5"
+
+# Random
+rand = "0.8"
+
+# Error handling
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.bench]
+inherits = "release"
+debug = true
