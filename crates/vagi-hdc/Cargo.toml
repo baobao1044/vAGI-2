@@ -12,6 +12,7 @@ serde_json = { workspace = true }
 rayon = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+rusqlite = { version = "0.31", features = ["bundled"] }
 
 [dev-dependencies]
 approx = { workspace = true }
