@@ -1,0 +1,11 @@
+[package]
+name = "vagi-lm"
+version = "0.1.0"
+edition = "2021"
+description = "Ternary language model — byte-level tokenizer, transformer, autoregressive generation"
+
+[dependencies]
+vagi-core = { path = "../vagi-core" }
+rand = { workspace = true }
+
+[dev-dependencies]

@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/vagi-core",
     "crates/vagi-hdc",
+    "crates/vagi-lm",
     "crates/vagi-math",
     "crates/vagi-physics",
     "crates/vagi-memory",
