@@ -4,6 +4,7 @@
 //!   cargo run --release -- run-all     # Full experiment
 //!   cargo run --release -- quick       # Quick smoke test
 
+mod backprop;
 mod evaluator;
 mod ground_truth;
 mod models;
@@ -12,6 +13,7 @@ mod trainer;
 use models::{HNNFP32, HNNTernary, HNNAdaptive, MLPFP32, HNNModel};
 use ground_truth::Dataset;
 use trainer::{TrainConfig, train_hnn_fp32, train_hnn_ternary, train_hnn_adaptive, train_mlp_fp32};
+use trainer::{train_analytical_fp32, train_analytical_ternary, train_analytical_adaptive, train_analytical_mlp};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -227,7 +229,7 @@ fn run_all() {
             // ── Train + Evaluate HNN-FP32 ──
             println!("    Training HNN-FP32...");
             let mut fp32 = HNNFP32::new(*d_state, hidden, n_layers, seed);
-            let r1 = train_hnn_fp32(&mut fp32, &train_split, &val_split, &config, sys_name, dt);
+            let r1 = train_analytical_fp32(&mut fp32, &train_split, &val_split, &config, sys_name, dt);
             println!("    → val_loss={:.4e} best@{} ({:.1}s)", r1.best_val_loss, r1.best_epoch, r1.train_seconds);
             train_results.push(r1);
 
@@ -246,7 +248,7 @@ fn run_all() {
             // ── Train + Evaluate HNN-Ternary ──
             println!("    Training HNN-Ternary...");
             let mut ternary = HNNTernary::new(*d_state, hidden, n_layers, seed);
-            let r2 = train_hnn_ternary(&mut ternary, &train_split, &val_split, &config, sys_name, dt);
+            let r2 = train_analytical_ternary(&mut ternary, &train_split, &val_split, &config, sys_name, dt);
             println!("    → val_loss={:.4e} best@{} ({:.1}s)", r2.best_val_loss, r2.best_epoch, r2.train_seconds);
             train_results.push(r2);
 
@@ -265,7 +267,7 @@ fn run_all() {
             // ── Train + Evaluate HNN-Adaptive ──
             println!("    Training HNN-Adaptive...");
             let mut adaptive = HNNAdaptive::new(*d_state, hidden, n_layers, seed);
-            let r3 = train_hnn_adaptive(&mut adaptive, &train_split, &val_split, &config, sys_name, dt);
+            let r3 = train_analytical_adaptive(&mut adaptive, &train_split, &val_split, &config, sys_name, dt);
             println!("    → val_loss={:.4e} best@{} ({:.1}s)", r3.best_val_loss, r3.best_epoch, r3.train_seconds);
             println!("    Basis weights: {:?}", adaptive.basis_weights());
             train_results.push(r3);
@@ -285,7 +287,7 @@ fn run_all() {
             // ── Train + Evaluate MLP-FP32 ──
             println!("    Training MLP-FP32...");
             let mut mlp = MLPFP32::new(*d_state, hidden, n_layers, seed);
-            let r4 = train_mlp_fp32(&mut mlp, &train_split, &val_split, &config, sys_name, dt);
+            let r4 = train_analytical_mlp(&mut mlp, &train_split, &val_split, &config, sys_name, dt);
             println!("    → val_loss={:.4e} best@{} ({:.1}s)", r4.best_val_loss, r4.best_epoch, r4.train_seconds);
             train_results.push(r4);
 

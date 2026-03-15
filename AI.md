@@ -1,4 +1,4 @@
-# AI.md — Complete Project Context for AI Agents
+  # AI.md — Complete Project Context for AI Agents
 
 > **READ THIS FIRST.** This document gives you full context to work on any part of this codebase.
 > After reading this, you should understand: what the project does, how every crate fits together,

@@ -402,6 +402,262 @@ fn mlp_loss(model: &MLPFP32, pairs: &[(Vec<f32>, Vec<f32>)]) -> f32 {
     }).sum::<f32>() / n
 }
 
+// ── Analytical Gradient Training (uses backprop + STE) ────────
+
+use crate::backprop;
+
+/// Train HNN-FP32 with analytical gradient (backprop).
+pub fn train_analytical_fp32(
+    model: &mut HNNFP32,
+    train_data: &Dataset,
+    val_data: &Dataset,
+    config: &TrainConfig,
+    system_name: &str,
+    dt: f32,
+) -> TrainResult {
+    let train_pairs = train_data.training_pairs(dt);
+    let val_pairs = val_data.training_pairs(dt);
+    let mut rng = StdRng::seed_from_u64(config.seed);
+
+    let mut best_val_loss = f32::INFINITY;
+    let mut best_epoch = 0;
+    let mut epochs_no_improve = 0;
+    let mut history = Vec::new();
+    let t0 = std::time::Instant::now();
+
+    for epoch in 0..config.max_epochs {
+        let batch = sample_batch(&train_pairs, config.batch_size, &mut rng);
+        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&&ref p| p.clone()).collect();
+
+        let grad = backprop::loss_gradient_fp32(model, &batch_owned);
+        backprop::apply_gradient_fp32(model, &grad, config.learning_rate);
+
+        if epoch % config.print_every == 0 || epoch == config.max_epochs - 1 {
+            let train_loss = hnn_full_loss(model, &train_pairs);
+            let val_loss = hnn_full_loss(model, &val_pairs);
+            history.push((epoch, train_loss, val_loss));
+
+            if val_loss < best_val_loss {
+                best_val_loss = val_loss;
+                best_epoch = epoch;
+                epochs_no_improve = 0;
+            } else {
+                epochs_no_improve += config.print_every;
+            }
+            if config.print_every <= 100 {
+                eprintln!("  [HNN-FP32-A] epoch {epoch:>4}: train={train_loss:.6e} val={val_loss:.6e}");
+            }
+        }
+        if epochs_no_improve >= config.patience {
+            eprintln!("  Early stopping at epoch {epoch} (best={best_epoch})");
+            break;
+        }
+    }
+
+    let elapsed = t0.elapsed().as_secs_f64();
+    TrainResult {
+        model_name: "HNN-FP32".to_string(),
+        system_name: system_name.to_string(),
+        seed: config.seed,
+        final_train_loss: hnn_full_loss(model, &train_pairs),
+        final_val_loss: hnn_full_loss(model, &val_pairs),
+        best_val_loss, best_epoch,
+        total_epochs: history.last().map(|h| h.0).unwrap_or(0),
+        train_seconds: elapsed, history,
+    }
+}
+
+/// Train HNN-Ternary with analytical gradient + STE.
+/// THIS is the key function: STE backprop flows gradient through quantization.
+pub fn train_analytical_ternary(
+    model: &mut HNNTernary,
+    train_data: &Dataset,
+    val_data: &Dataset,
+    config: &TrainConfig,
+    system_name: &str,
+    dt: f32,
+) -> TrainResult {
+    let train_pairs = train_data.training_pairs(dt);
+    let val_pairs = val_data.training_pairs(dt);
+    let mut rng = StdRng::seed_from_u64(config.seed);
+
+    let mut best_val_loss = f32::INFINITY;
+    let mut best_epoch = 0;
+    let mut epochs_no_improve = 0;
+    let mut history = Vec::new();
+    let t0 = std::time::Instant::now();
+
+    for epoch in 0..config.max_epochs {
+        let batch = sample_batch(&train_pairs, config.batch_size, &mut rng);
+        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&&ref p| p.clone()).collect();
+
+        let grad = backprop::loss_gradient_ternary(model, &batch_owned);
+        backprop::apply_gradient_ternary(model, &grad, config.learning_rate);
+
+        if epoch % config.print_every == 0 || epoch == config.max_epochs - 1 {
+            let train_loss = hnn_full_loss(model, &train_pairs);
+            let val_loss = hnn_full_loss(model, &val_pairs);
+            history.push((epoch, train_loss, val_loss));
+
+            if val_loss < best_val_loss {
+                best_val_loss = val_loss;
+                best_epoch = epoch;
+                epochs_no_improve = 0;
+            } else {
+                epochs_no_improve += config.print_every;
+            }
+            if config.print_every <= 100 {
+                eprintln!("  [HNN-Ternary-STE] epoch {epoch:>4}: train={train_loss:.6e} val={val_loss:.6e}");
+            }
+        }
+        if epochs_no_improve >= config.patience {
+            eprintln!("  Early stopping at epoch {epoch} (best={best_epoch})");
+            break;
+        }
+    }
+
+    let elapsed = t0.elapsed().as_secs_f64();
+    TrainResult {
+        model_name: "HNN-Ternary".to_string(),
+        system_name: system_name.to_string(),
+        seed: config.seed,
+        final_train_loss: hnn_full_loss(model, &train_pairs),
+        final_val_loss: hnn_full_loss(model, &val_pairs),
+        best_val_loss, best_epoch,
+        total_epochs: history.last().map(|h| h.0).unwrap_or(0),
+        train_seconds: elapsed, history,
+    }
+}
+
+/// Train HNN-Adaptive with analytical gradient + STE + basis gradient.
+pub fn train_analytical_adaptive(
+    model: &mut HNNAdaptive,
+    train_data: &Dataset,
+    val_data: &Dataset,
+    config: &TrainConfig,
+    system_name: &str,
+    dt: f32,
+) -> TrainResult {
+    let train_pairs = train_data.training_pairs(dt);
+    let val_pairs = val_data.training_pairs(dt);
+    let mut rng = StdRng::seed_from_u64(config.seed);
+
+    let mut best_val_loss = f32::INFINITY;
+    let mut best_epoch = 0;
+    let mut epochs_no_improve = 0;
+    let mut history = Vec::new();
+    let t0 = std::time::Instant::now();
+
+    for epoch in 0..config.max_epochs {
+        let batch = sample_batch(&train_pairs, config.batch_size, &mut rng);
+        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&&ref p| p.clone()).collect();
+
+        let (weight_grad, basis_grad) = backprop::loss_gradient_adaptive(model, &batch_owned);
+
+        if epoch < config.basis_warmup_epochs {
+            // Warmup: only update weights
+            backprop::apply_gradient_adaptive(model, &weight_grad, &vec![0.0; basis_grad.len()], config.learning_rate, 0.0);
+        } else {
+            backprop::apply_gradient_adaptive(model, &weight_grad, &basis_grad, config.learning_rate, config.basis_lr);
+        }
+
+        if epoch % config.print_every == 0 || epoch == config.max_epochs - 1 {
+            let train_loss = hnn_full_loss(model, &train_pairs);
+            let val_loss = hnn_full_loss(model, &val_pairs);
+            history.push((epoch, train_loss, val_loss));
+
+            if val_loss < best_val_loss {
+                best_val_loss = val_loss;
+                best_epoch = epoch;
+                epochs_no_improve = 0;
+            } else {
+                epochs_no_improve += config.print_every;
+            }
+            if config.print_every <= 100 {
+                eprintln!("  [HNN-Adaptive-A] epoch {epoch:>4}: train={train_loss:.6e} val={val_loss:.6e} basis={:?}",
+                    model.basis_weights());
+            }
+        }
+        if epochs_no_improve >= config.patience {
+            eprintln!("  Early stopping at epoch {epoch} (best={best_epoch})");
+            break;
+        }
+    }
+
+    let elapsed = t0.elapsed().as_secs_f64();
+    TrainResult {
+        model_name: "HNN-Adaptive".to_string(),
+        system_name: system_name.to_string(),
+        seed: config.seed,
+        final_train_loss: hnn_full_loss(model, &train_pairs),
+        final_val_loss: hnn_full_loss(model, &val_pairs),
+        best_val_loss, best_epoch,
+        total_epochs: history.last().map(|h| h.0).unwrap_or(0),
+        train_seconds: elapsed, history,
+    }
+}
+
+/// Train MLP-FP32 with analytical gradient.
+pub fn train_analytical_mlp(
+    model: &mut MLPFP32,
+    train_data: &Dataset,
+    val_data: &Dataset,
+    config: &TrainConfig,
+    system_name: &str,
+    dt: f32,
+) -> TrainResult {
+    let train_pairs = train_data.training_pairs(dt);
+    let val_pairs = val_data.training_pairs(dt);
+    let mut rng = StdRng::seed_from_u64(config.seed);
+
+    let mut best_val_loss = f32::INFINITY;
+    let mut best_epoch = 0;
+    let mut epochs_no_improve = 0;
+    let mut history = Vec::new();
+    let t0 = std::time::Instant::now();
+
+    for epoch in 0..config.max_epochs {
+        let batch = sample_batch(&train_pairs, config.batch_size, &mut rng);
+        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&&ref p| p.clone()).collect();
+
+        let grad = backprop::loss_gradient_mlp(model, &batch_owned);
+        backprop::apply_gradient_mlp(model, &grad, config.learning_rate);
+
+        if epoch % config.print_every == 0 || epoch == config.max_epochs - 1 {
+            let train_loss = mlp_loss(model, &train_pairs);
+            let val_loss = mlp_loss(model, &val_pairs);
+            history.push((epoch, train_loss, val_loss));
+
+            if val_loss < best_val_loss {
+                best_val_loss = val_loss;
+                best_epoch = epoch;
+                epochs_no_improve = 0;
+            } else {
+                epochs_no_improve += config.print_every;
+            }
+            if config.print_every <= 100 {
+                eprintln!("  [MLP-FP32-A] epoch {epoch:>4}: train={train_loss:.6e} val={val_loss:.6e}");
+            }
+        }
+        if epochs_no_improve >= config.patience {
+            eprintln!("  Early stopping at epoch {epoch} (best={best_epoch})");
+            break;
+        }
+    }
+
+    let elapsed = t0.elapsed().as_secs_f64();
+    TrainResult {
+        model_name: "MLP-FP32".to_string(),
+        system_name: system_name.to_string(),
+        seed: config.seed,
+        final_train_loss: mlp_loss(model, &train_pairs),
+        final_val_loss: mlp_loss(model, &val_pairs),
+        best_val_loss, best_epoch,
+        total_epochs: history.last().map(|h| h.0).unwrap_or(0),
+        train_seconds: elapsed, history,
+    }
+}
+
 /// Save training history to CSV file.
 pub fn save_training_csv(results: &[TrainResult], path: &str) {
     let mut lines = vec![

@@ -13,11 +13,11 @@ fn silu(x: f32) -> f32 { x / (1.0 + (-x).exp()) }
 
 /// Simple f32 linear layer.
 #[derive(Clone)]
-struct LinearFP32 {
-    w: Vec<f32>, // [out × in]
-    b: Vec<f32>, // [out]
-    in_features: usize,
-    out_features: usize,
+pub(crate) struct LinearFP32 {
+    pub(crate) w: Vec<f32>, // [out × in]
+    pub(crate) b: Vec<f32>, // [out]
+    pub(crate) in_features: usize,
+    pub(crate) out_features: usize,
 }
 
 impl LinearFP32 {
@@ -44,12 +44,12 @@ impl LinearFP32 {
 
 /// Ternary linear layer (quantized from latent f32 via STE).
 #[derive(Clone)]
-struct LinearTernary {
-    w_latent: Vec<f32>,  // shadow weights
-    b: Vec<f32>,
-    in_features: usize,
-    out_features: usize,
-    gamma: f32,
+pub(crate) struct LinearTernary {
+    pub(crate) w_latent: Vec<f32>,  // shadow weights
+    pub(crate) b: Vec<f32>,
+    pub(crate) in_features: usize,
+    pub(crate) out_features: usize,
+    pub(crate) gamma: f32,
 }
 
 impl LinearTernary {
@@ -93,8 +93,8 @@ impl LinearTernary {
 
 /// AdaptiveBasis activation (trimmed 3-basis: identity + sin + tanh).
 #[derive(Clone)]
-struct AdaptiveActivation {
-    weights: [f32; 3], // [identity, sin, tanh]
+pub(crate) struct AdaptiveActivation {
+    pub(crate) weights: [f32; 3], // [identity, sin, tanh]
 }
 
 impl AdaptiveActivation {
@@ -115,7 +115,7 @@ impl AdaptiveActivation {
 /// Hamiltonian NN with float32 weights.
 #[derive(Clone)]
 pub struct HNNFP32 {
-    layers: Vec<LinearFP32>,
+    pub(crate) layers_inner: Vec<LinearFP32>,
     d_state: usize,
 }
 
@@ -134,38 +134,41 @@ impl HNNFP32 {
         }
         // Output layer (scalar energy)
         layers.push(LinearFP32::new(hidden, 1, &mut rng));
-        Self { layers, d_state }
+        Self { layers_inner: layers, d_state }
     }
+
+    pub(crate) fn layers(&self) -> &[LinearFP32] { &self.layers_inner }
+    pub(crate) fn layers_mut(&mut self) -> &mut [LinearFP32] { &mut self.layers_inner }
 }
 
 impl HNNModel for HNNFP32 {
     fn hamiltonian(&self, state: &[f32]) -> f32 {
         let mut x = state.to_vec();
-        for (i, layer) in self.layers.iter().enumerate() {
+        for (i, layer) in self.layers_inner.iter().enumerate() {
             x = layer.forward(&x);
-            if i < self.layers.len() - 1 {
+            if i < self.layers_inner.len() - 1 {
                 x.iter_mut().for_each(|v| *v = silu(*v));
             }
         }
         x[0]
     }
     fn d_state(&self) -> usize { self.d_state }
-    fn param_count(&self) -> usize { self.layers.iter().map(|l| l.param_count()).sum() }
-    fn memory_bytes(&self) -> usize { self.layers.iter().map(|l| l.memory_bytes()).sum() }
+    fn param_count(&self) -> usize { self.layers_inner.iter().map(|l| l.param_count()).sum() }
+    fn memory_bytes(&self) -> usize { self.layers_inner.iter().map(|l| l.memory_bytes()).sum() }
     fn name(&self) -> &str { "HNN-FP32" }
 
     fn update_weights(&mut self, grad_states: &[(Vec<f32>, Vec<f32>)], lr: f32) {
         // Simple numerical gradient descent on loss w.r.t. all parameters
         let eps = 1e-4;
-        for layer_idx in 0..self.layers.len() {
-            let n_w = self.layers[layer_idx].w.len();
+        for layer_idx in 0..self.layers_inner.len() {
+            let n_w = self.layers_inner[layer_idx].w.len();
             for wi in 0..n_w {
                 let loss0 = self.compute_loss(grad_states);
-                self.layers[layer_idx].w[wi] += eps;
+                self.layers_inner[layer_idx].w[wi] += eps;
                 let loss1 = self.compute_loss(grad_states);
-                self.layers[layer_idx].w[wi] -= eps;
+                self.layers_inner[layer_idx].w[wi] -= eps;
                 let grad = (loss1 - loss0) / eps;
-                self.layers[layer_idx].w[wi] -= lr * grad;
+                self.layers_inner[layer_idx].w[wi] -= lr * grad;
             }
         }
     }
@@ -194,6 +197,9 @@ impl HNNTernary {
         layers.push(LinearTernary::new(hidden, 1, &mut rng));
         Self { layers, d_state }
     }
+
+    pub(crate) fn layers(&self) -> &[LinearTernary] { &self.layers }
+    pub(crate) fn layers_mut(&mut self) -> &mut [LinearTernary] { &mut self.layers }
 }
 
 impl HNNModel for HNNTernary {
@@ -260,6 +266,11 @@ impl HNNAdaptive {
         layers.push(LinearTernary::new(hidden, 1, &mut rng));
         Self { layers, activations, d_state }
     }
+
+    pub(crate) fn layers(&self) -> &[LinearTernary] { &self.layers }
+    pub(crate) fn layers_mut(&mut self) -> &mut [LinearTernary] { &mut self.layers }
+    pub(crate) fn activations(&self) -> &[AdaptiveActivation] { &self.activations }
+    pub(crate) fn activations_mut(&mut self) -> &mut [AdaptiveActivation] { &mut self.activations }
 }
 
 impl HNNModel for HNNAdaptive {
@@ -363,6 +374,10 @@ impl MLPFP32 {
         layers.push(LinearFP32::new(hidden, io_dim, &mut rng)); // output = state dim
         Self { layers, d_state }
     }
+
+    pub(crate) fn layers(&self) -> &[LinearFP32] { &self.layers }
+    pub(crate) fn layers_mut(&mut self) -> &mut [LinearFP32] { &mut self.layers }
+
 
     /// Direct next-state prediction: (q,p) → (dq/dt, dp/dt)
     pub fn predict_derivatives(&self, state: &[f32]) -> Vec<f32> {
