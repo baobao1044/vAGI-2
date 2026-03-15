@@ -300,17 +300,43 @@ impl HNNModel for HNNAdaptive {
                 }
             }
         }
-        // Update basis weights
+        // Update basis weights with 10× higher lr (clamped gradient)
+        let basis_lr = lr * 10.0;
         for act_idx in 0..self.activations.len() {
             for bi in 0..3 {
                 let loss0 = self.compute_loss(grad_states);
                 self.activations[act_idx].weights[bi] += eps;
                 let loss1 = self.compute_loss(grad_states);
                 self.activations[act_idx].weights[bi] -= eps;
-                let grad = (loss1 - loss0) / eps;
-                self.activations[act_idx].weights[bi] -= lr * 0.01 * grad; // smaller LR for basis
+                let grad = ((loss1 - loss0) / eps).clamp(-1.0, 1.0);
+                self.activations[act_idx].weights[bi] -= basis_lr * grad;
             }
         }
+    }
+}
+
+impl HNNAdaptive {
+    /// Update only ternary weights (freeze basis). Used during warmup.
+    pub fn update_weights_only(&mut self, grad_states: &[(Vec<f32>, Vec<f32>)], lr: f32) {
+        let eps = 1e-4;
+        for layer_idx in 0..self.layers.len() {
+            let n_w = self.layers[layer_idx].w_latent.len();
+            for wi in 0..n_w {
+                let loss0 = self.compute_loss(grad_states);
+                self.layers[layer_idx].w_latent[wi] += eps;
+                let loss1 = self.compute_loss(grad_states);
+                self.layers[layer_idx].w_latent[wi] -= eps;
+                let grad = (loss1 - loss0) / eps;
+                if self.layers[layer_idx].w_latent[wi].abs() < 2.0 {
+                    self.layers[layer_idx].w_latent[wi] -= lr * grad;
+                }
+            }
+        }
+    }
+
+    /// Get current basis weights (for logging).
+    pub fn basis_weights(&self) -> Vec<[f32; 3]> {
+        self.activations.iter().map(|a| a.weights).collect()
     }
 }
 

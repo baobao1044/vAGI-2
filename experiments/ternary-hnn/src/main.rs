@@ -7,9 +7,11 @@
 mod evaluator;
 mod ground_truth;
 mod models;
+mod trainer;
 
 use models::{HNNFP32, HNNTernary, HNNAdaptive, MLPFP32, HNNModel};
 use ground_truth::Dataset;
+use trainer::{TrainConfig, train_hnn_fp32, train_hnn_ternary, train_hnn_adaptive, train_mlp_fp32};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -83,35 +85,61 @@ fn run_quick() {
     println!("\n✅ Quick test passed!");
 }
 
-/// Training smoke test.
+/// Training smoke test — trains all 4 models on harmonic oscillator.
 fn run_training() {
-    println!("=== Training Test — HNN-FP32 on Harmonic ===\n");
+    println!("=== Training All 4 Models on Harmonic ===\n");
 
     let seed = 42u64;
     let d_state = 1;
     let hidden = 16;
     let n_layers = 2;
+    let dt = 0.01;
 
-    let mut model = HNNFP32::new(d_state, hidden, n_layers, seed);
-
-    // Generate small dataset
+    // Generate dataset
     let ds = Dataset::generate(
-        20, 20, 0.01, 2,
+        50, 20, dt, 2,
         &[(-1.0, 1.0), (-1.0, 1.0)],
         &ground_truth::harmonic::derivatives, seed,
     );
-    let pairs = ds.training_pairs(0.01);
-    // Use only a small subset for speed
-    let mini_batch: Vec<_> = pairs.iter().take(10).cloned().collect();
+    let (train_ds, val_ds) = ds.split(0.2);
 
-    println!("Training with {} pairs, {} batch...\n", pairs.len(), mini_batch.len());
+    let config = TrainConfig {
+        max_epochs: 20,
+        batch_size: 16,
+        print_every: 5,
+        patience: 50,
+        basis_warmup_epochs: 5,
+        seed,
+        ..Default::default()
+    };
 
-    for epoch in 0..5 {
-        let loss = model.compute_loss(&mini_batch);
-        println!("Epoch {epoch}: loss = {loss:.6}");
-        model.update_weights(&mini_batch, 0.001);
-    }
+    println!("--- HNN-FP32 ---");
+    let mut fp32 = HNNFP32::new(d_state, hidden, n_layers, seed);
+    let r1 = train_hnn_fp32(&mut fp32, &train_ds, &val_ds, &config, "harmonic", dt);
+    println!("  Final: train={:.6e} val={:.6e} best_val={:.6e}@{} ({:.1}s)\n",
+        r1.final_train_loss, r1.final_val_loss, r1.best_val_loss, r1.best_epoch, r1.train_seconds);
 
+    println!("--- HNN-Ternary ---");
+    let mut ternary = HNNTernary::new(d_state, hidden, n_layers, seed);
+    let r2 = train_hnn_ternary(&mut ternary, &train_ds, &val_ds, &config, "harmonic", dt);
+    println!("  Final: train={:.6e} val={:.6e} best_val={:.6e}@{} ({:.1}s)\n",
+        r2.final_train_loss, r2.final_val_loss, r2.best_val_loss, r2.best_epoch, r2.train_seconds);
+
+    println!("--- HNN-Adaptive ---");
+    let mut adaptive = HNNAdaptive::new(d_state, hidden, n_layers, seed);
+    let r3 = train_hnn_adaptive(&mut adaptive, &train_ds, &val_ds, &config, "harmonic", dt);
+    println!("  Final: train={:.6e} val={:.6e} best_val={:.6e}@{} ({:.1}s)\n",
+        r3.final_train_loss, r3.final_val_loss, r3.best_val_loss, r3.best_epoch, r3.train_seconds);
+
+    println!("--- MLP-FP32 ---");
+    let mut mlp = MLPFP32::new(d_state, hidden, n_layers, seed);
+    let r4 = train_mlp_fp32(&mut mlp, &train_ds, &val_ds, &config, "harmonic", dt);
+    println!("  Final: train={:.6e} val={:.6e} best_val={:.6e}@{} ({:.1}s)\n",
+        r4.final_train_loss, r4.final_val_loss, r4.best_val_loss, r4.best_epoch, r4.train_seconds);
+
+    // Save CSV
+    trainer::save_training_csv(&[r1, r2, r3, r4], "results/training_smoke.csv");
+    println!("Results saved to results/training_smoke.csv");
     println!("\n✅ Training test done!");
 }
 
