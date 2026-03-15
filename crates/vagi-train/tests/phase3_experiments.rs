@@ -8,7 +8,7 @@
 //! AdaptiveNet additionally reports learned activation weights per layer.
 
 use std::time::Instant;
-use vagi_core::{AdaptiveBasis, AdaptiveBlock, BitNetBlock, BitNetLinear, N_BASIS, BASIS_NAMES};
+use vagi_core::{AdaptiveBasis, AdaptiveBlock, BasisScheduler, BitNetBlock, N_BASIS, BASIS_NAMES};
 use vagi_physics::microworlds::mechanics::Spring;
 use vagi_physics::microworlds::Microworld;
 
@@ -482,4 +482,75 @@ fn experiment_4_ablation() {
 
     // Verify no NaN
     assert!(baseline.is_finite(), "Baseline MSE should be finite");
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Experiment 5: 3-Basis (trimmed+SiLU) vs 6-Basis (uniform)
+// ═══════════════════════════════════════════════════════════════
+
+/// Train step with warmup scheduler controlling basis lr.
+fn adaptive_train_step_scheduled(
+    block: &mut AdaptiveBlock,
+    input: &[f32],
+    target: &[f32],
+    scheduler: &mut BasisScheduler,
+) -> f32 {
+    let basis_lr = scheduler.step_lr();
+    if basis_lr == 0.0 {
+        // Frozen: just forward, no update
+        let out = block.forward_vec(input).unwrap();
+        return mse(&out, target);
+    }
+    adaptive_train_step(block, input, target, basis_lr)
+}
+
+#[test]
+fn experiment_5_trimmed_vs_full() {
+    let d_model = 32;
+    let ffn_dim = 128;
+    let train_data = collect_spring_data(30, 50);
+    let test_data = collect_spring_data(5, 50);
+    let total_steps = train_data.len() * 15; // 15 epochs worth
+    let warmup = train_data.len() * 2;       // freeze 2 epochs
+
+    eprintln!("\n═══ Experiment 5: Trimmed (3) vs Full (6) ═══");
+    eprintln!("Spring dynamics, {} train, {} test", train_data.len(), test_data.len());
+    eprintln!("warmup={warmup} steps, total={total_steps} steps\n");
+
+    // Configs to compare
+    let configs: Vec<(&str, AdaptiveBlock)> = vec![
+        ("6-basis uniform", AdaptiveBlock::new(d_model, ffn_dim)),
+        ("3-basis uniform", AdaptiveBlock::trimmed(d_model, ffn_dim)),
+        ("3-basis SiLU-init", AdaptiveBlock::silu_init(d_model, ffn_dim)),
+    ];
+
+    eprintln!("┌──────────────────┬──────────────┬──────────────┬────────────────────────────────┐");
+    eprintln!("│ Config           │ Final MSE    │ Wall time    │ Learned shape                  │");
+    eprintln!("├──────────────────┼──────────────┼──────────────┼────────────────────────────────┤");
+
+    for (name, mut block) in configs {
+        let mut scheduler = BasisScheduler::new(warmup, 0.001);
+        let t0 = Instant::now();
+
+        for epoch in 0..15 {
+            for (inp, tgt) in &train_data {
+                adaptive_train_step_scheduled(&mut block, inp, tgt, &mut scheduler);
+            }
+            if epoch % 5 == 0 {
+                let test_mse: f32 = test_data.iter()
+                    .map(|(inp, tgt)| mse(&block.forward_vec(inp).unwrap(), tgt))
+                    .sum::<f32>() / test_data.len() as f32;
+                eprintln!("  [{name}] epoch {epoch}: MSE = {test_mse:.4}");
+            }
+        }
+
+        let elapsed = t0.elapsed();
+        let final_mse: f32 = test_data.iter()
+            .map(|(inp, tgt)| mse(&block.forward_vec(inp).unwrap(), tgt))
+            .sum::<f32>() / test_data.len() as f32;
+
+        let shape = block.activation().describe();
+        eprintln!("│ {name:<16} │ {final_mse:>12.4} │ {:>10.2?} │ {shape:<30} │", elapsed);
+    }
+    eprintln!("└──────────────────┴──────────────┴──────────────┴────────────────────────────────┘");
 }
