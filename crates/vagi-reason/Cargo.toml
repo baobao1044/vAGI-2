@@ -8,6 +8,7 @@ description = "Reasoning engine — MoE + predictive coding for vAGI v2"
 vagi-core = { path = "../vagi-core" }
 vagi-memory = { path = "../vagi-memory" }
 vagi-math = { path = "../vagi-math" }
+rand = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
