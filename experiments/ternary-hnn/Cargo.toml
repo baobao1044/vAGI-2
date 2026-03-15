@@ -1,0 +1,15 @@
+[package]
+name = "ternary-hnn"
+version = "0.1.0"
+edition = "2021"
+description = "Experiment: Energy Conservation at 1.58 Bits — Hamiltonian NNs with Ternary Weights"
+
+[[bin]]
+name = "ternary-hnn"
+path = "src/main.rs"
+
+[dependencies]
+vagi-core = { path = "../../crates/vagi-core" }
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"

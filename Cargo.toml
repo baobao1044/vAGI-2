@@ -10,6 +10,7 @@ members = [
     "crates/vagi-world",
     "crates/vagi-runtime",
     "crates/vagi-train",
+    "experiments/ternary-hnn",
 ]
 
 [workspace.dependencies]
