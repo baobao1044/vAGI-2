@@ -143,23 +143,36 @@ fn run_training() {
     println!("\n✅ Training test done!");
 }
 
-/// Full experiment — all models × all systems × all seeds.
+/// Full experiment — train all models × all systems × all seeds, then evaluate.
 fn run_all() {
-    println!("=== Ternary HNN — Full Experiment ===\n");
+    println!("=== Ternary HNN — Full Experiment (Train → Evaluate) ===\n");
 
     let seeds = [42u64, 123, 456];
-    let d_state_1d = 1;
-    let d_state_2d = 2;
-    let hidden = 64;
-    let n_layers = 3;
+    let hidden = 16;      // small model for feasible numerical gradient
+    let n_layers = 2;
     let eval_steps = [1, 10, 100, 1000];
-    let n_eval = 20; // initial conditions for evaluation
+    let n_train = 200;    // training trajectories
+    let n_eval = 50;      // eval initial conditions
+    let traj_len = 50;    // steps per trajectory
     let dt = 0.01;
 
-    println!("Generating datasets...");
+    let train_config = TrainConfig {
+        max_epochs: 200,
+        batch_size: 32,
+        learning_rate: 1e-3,
+        basis_lr: 1e-2,
+        basis_warmup_epochs: 30,
+        patience: 100,
+        grad_eps: 1e-4,
+        seed: 0, // will be overwritten per run
+        print_every: 50,
+    };
 
-    // System configs: (name, state_dim, energy_fn, deriv_fn, initial_range)
-    let systems: Vec<(&str, usize, Box<dyn Fn(&[f32])->f32>, Box<dyn Fn(&[f32])->Vec<f32>>, Vec<(f32,f32)>)> = vec![
+    // System configs: (name, state_dim, energy_fn, deriv_fn, train_init_range, eval_init_range)
+    let systems: Vec<(&str, usize,
+        Box<dyn Fn(&[f32])->f32>,
+        Box<dyn Fn(&[f32])->Vec<f32>>,
+        Vec<(f32,f32)>)> = vec![
         ("harmonic", 1,
          Box::new(ground_truth::harmonic::energy),
          Box::new(ground_truth::harmonic::derivatives),
@@ -167,22 +180,38 @@ fn run_all() {
         ("pendulum", 1,
          Box::new(ground_truth::pendulum::energy),
          Box::new(ground_truth::pendulum::derivatives),
-         vec![(-std::f32::consts::PI, std::f32::consts::PI), (-2.0, 2.0)]),
+         vec![(-std::f32::consts::PI * 0.8, std::f32::consts::PI * 0.8), (-1.5, 1.5)]),
         ("double_pendulum", 2,
          Box::new(ground_truth::double_pendulum::energy),
          Box::new(ground_truth::double_pendulum::derivatives),
-         vec![(-1.0, 1.0), (-1.0, 1.0), (-0.5, 0.5), (-0.5, 0.5)]),
+         vec![(-0.8, 0.8), (-0.8, 0.8), (-0.5, 0.5), (-0.5, 0.5)]),
     ];
 
-    // CSV header
-    let mut csv_lines = vec![
+    std::fs::create_dir_all("results").ok();
+
+    // ── Experiment A: Energy Conservation ──────────────────────
+    println!("╔══════════════════════════════════════╗");
+    println!("║  EXPERIMENT A: Energy Conservation   ║");
+    println!("╚══════════════════════════════════════╝\n");
+
+    let mut eval_csv = vec![
         "model,system,seed,step,metric,param_count,value".to_string()
     ];
+    let mut train_results = Vec::new();
 
     for (sys_name, d_state, energy_fn, deriv_fn, init_range) in &systems {
-        println!("\n--- System: {sys_name} ---");
+        println!("\n━━━ System: {sys_name} (d_state={d_state}) ━━━");
 
-        // Generate evaluation initial conditions
+        // Generate training data
+        let train_ds = Dataset::generate(
+            n_train, traj_len, dt, 2 * d_state,
+            init_range, deriv_fn.as_ref(), 777,
+        );
+        let (train_split, val_split) = train_ds.split(0.2);
+        println!("  Data: {} train, {} val trajectories",
+            train_split.trajectories.len(), val_split.trajectories.len());
+
+        // Generate eval initial conditions (different seed from training)
         let eval_ds = Dataset::generate(
             n_eval, 1, dt, 2 * d_state,
             init_range, deriv_fn.as_ref(), 999,
@@ -191,65 +220,134 @@ fn run_all() {
             .map(|t| t[0].clone()).collect();
 
         for &seed in &seeds {
-            println!("  Seed {seed}:");
+            println!("\n  ── Seed {seed} ──");
+            let mut config = train_config.clone();
+            config.seed = seed;
 
-            // Create all 4 models
-            let fp32 = HNNFP32::new(*d_state, hidden, n_layers, seed);
-            let ternary = HNNTernary::new(*d_state, hidden, n_layers, seed);
-            let adaptive = HNNAdaptive::new(*d_state, hidden, n_layers, seed);
+            // ── Train + Evaluate HNN-FP32 ──
+            println!("    Training HNN-FP32...");
+            let mut fp32 = HNNFP32::new(*d_state, hidden, n_layers, seed);
+            let r1 = train_hnn_fp32(&mut fp32, &train_split, &val_split, &config, sys_name, dt);
+            println!("    → val_loss={:.4e} best@{} ({:.1}s)", r1.best_val_loss, r1.best_epoch, r1.train_seconds);
+            train_results.push(r1);
 
-            // Evaluate HNN models
-            let hnn_models: Vec<(&str, &dyn HNNModel)> = vec![
-                ("HNN-FP32", &fp32),
-                ("HNN-Ternary", &ternary),
-                ("HNN-Adaptive", &adaptive),
-            ];
-
-            for (name, model) in &hnn_models {
-                let result = evaluator::evaluate_hnn(
-                    *model, sys_name, seed,
-                    energy_fn.as_ref(), deriv_fn.as_ref(),
-                    &eval_inits, dt, &eval_steps,
-                );
-                print!("    {name}: ");
-                for (step, drift) in &result.energy_drifts {
-                    print!("ΔE@{step}={drift:.2e} ");
-                }
-                println!("| {:.0}µs | {}B", result.inference_us, result.memory_bytes);
-                csv_lines.extend(result.to_csv_lines());
+            let result = evaluator::evaluate_hnn(
+                &fp32, sys_name, seed,
+                energy_fn.as_ref(), deriv_fn.as_ref(),
+                &eval_inits, dt, &eval_steps,
+            );
+            print!("    Eval: ");
+            for (step, drift) in &result.energy_drifts {
+                print!("ΔE@{step}={drift:.2e} ");
             }
+            println!("| {:.1}µs", result.inference_us);
+            eval_csv.extend(result.to_csv_lines());
 
-            // MLP-FP32: evaluate differently (no Hamiltonian)
-            let mlp = MLPFP32::new(*d_state, hidden, n_layers, seed);
-            // For MLP, evaluate trajectory via direct integration
-            let test_state = &eval_inits[0];
-            let mlp_speed = evaluator::inference_speed_mlp(&mlp, test_state, 1000);
-            let mem = mlp.memory_bytes();
-            let params = mlp.param_count();
-            println!("    MLP-FP32: {:.0}µs | {mem}B (no energy structure)", mlp_speed);
-            csv_lines.push(format!("MLP-FP32,{sys_name},{seed},0,inference_us,{params},{mlp_speed:.2}"));
-            csv_lines.push(format!("MLP-FP32,{sys_name},{seed},0,memory_bytes,{params},{mem}"));
+            // ── Train + Evaluate HNN-Ternary ──
+            println!("    Training HNN-Ternary...");
+            let mut ternary = HNNTernary::new(*d_state, hidden, n_layers, seed);
+            let r2 = train_hnn_ternary(&mut ternary, &train_split, &val_split, &config, sys_name, dt);
+            println!("    → val_loss={:.4e} best@{} ({:.1}s)", r2.best_val_loss, r2.best_epoch, r2.train_seconds);
+            train_results.push(r2);
+
+            let result = evaluator::evaluate_hnn(
+                &ternary, sys_name, seed,
+                energy_fn.as_ref(), deriv_fn.as_ref(),
+                &eval_inits, dt, &eval_steps,
+            );
+            print!("    Eval: ");
+            for (step, drift) in &result.energy_drifts {
+                print!("ΔE@{step}={drift:.2e} ");
+            }
+            println!("| {:.1}µs", result.inference_us);
+            eval_csv.extend(result.to_csv_lines());
+
+            // ── Train + Evaluate HNN-Adaptive ──
+            println!("    Training HNN-Adaptive...");
+            let mut adaptive = HNNAdaptive::new(*d_state, hidden, n_layers, seed);
+            let r3 = train_hnn_adaptive(&mut adaptive, &train_split, &val_split, &config, sys_name, dt);
+            println!("    → val_loss={:.4e} best@{} ({:.1}s)", r3.best_val_loss, r3.best_epoch, r3.train_seconds);
+            println!("    Basis weights: {:?}", adaptive.basis_weights());
+            train_results.push(r3);
+
+            let result = evaluator::evaluate_hnn(
+                &adaptive, sys_name, seed,
+                energy_fn.as_ref(), deriv_fn.as_ref(),
+                &eval_inits, dt, &eval_steps,
+            );
+            print!("    Eval: ");
+            for (step, drift) in &result.energy_drifts {
+                print!("ΔE@{step}={drift:.2e} ");
+            }
+            println!("| {:.1}µs", result.inference_us);
+            eval_csv.extend(result.to_csv_lines());
+
+            // ── Train + Evaluate MLP-FP32 ──
+            println!("    Training MLP-FP32...");
+            let mut mlp = MLPFP32::new(*d_state, hidden, n_layers, seed);
+            let r4 = train_mlp_fp32(&mut mlp, &train_split, &val_split, &config, sys_name, dt);
+            println!("    → val_loss={:.4e} best@{} ({:.1}s)", r4.best_val_loss, r4.best_epoch, r4.train_seconds);
+            train_results.push(r4);
+
+            // MLP energy evaluation via Euler integration
+            let mut mlp_drift_total = 0.0f32;
+            for init in &eval_inits {
+                let e0 = energy_fn(init);
+                let mut state = init.clone();
+                let max_step = *eval_steps.iter().max().unwrap_or(&100);
+                for _ in 0..max_step {
+                    let deriv = mlp.predict_derivatives(&state);
+                    for j in 0..state.len() {
+                        state[j] += dt * deriv[j];
+                    }
+                }
+                let ef = energy_fn(&state);
+                mlp_drift_total += (ef - e0).abs() / e0.abs().max(1e-10);
+            }
+            let mlp_avg_drift = mlp_drift_total / eval_inits.len() as f32;
+            let mlp_speed = evaluator::inference_speed_mlp(&mlp, &eval_inits[0], 1000);
+            println!("    Eval: ΔE@{}={:.2e} | {:.1}µs (Euler, no Hamiltonian)",
+                eval_steps.last().unwrap(), mlp_avg_drift, mlp_speed);
+
+            eval_csv.push(format!("MLP-FP32,{sys_name},{seed},{},energy_drift,{},{:.6e}",
+                eval_steps.last().unwrap(), mlp.param_count(), mlp_avg_drift));
+            eval_csv.push(format!("MLP-FP32,{sys_name},{seed},0,inference_us,{},{:.2}",
+                mlp.param_count(), mlp_speed));
+            eval_csv.push(format!("MLP-FP32,{sys_name},{seed},0,memory_bytes,{},{}",
+                mlp.param_count(), mlp.memory_bytes()));
         }
     }
 
-    // Save CSV
-    let csv_content = csv_lines.join("\n");
-    std::fs::create_dir_all("results").ok();
-    std::fs::write("results/experiment_A.csv", &csv_content)
-        .expect("Failed to write CSV");
-    println!("\n\nResults saved to results/experiment_A.csv");
-    println!("Total CSV lines: {}", csv_lines.len());
+    // Save results
+    let eval_content = eval_csv.join("\n");
+    std::fs::write("results/experiment_A.csv", &eval_content)
+        .expect("Failed to write experiment_A.csv");
+    println!("\n\n═══ Results saved to results/experiment_A.csv ═══");
 
-    // Print summary table
-    println!("\n=== SUMMARY ===");
-    println!("{:<15} {:>10} {:>10}", "Model", "Params", "Memory");
+    trainer::save_training_csv(&train_results, "results/training_history.csv");
+    println!("Training history saved to results/training_history.csv");
+
+    // ── Summary Table ──────────────────────────────────────────
+    println!("\n╔══════════════════════════════════════════════════════╗");
+    println!("║                    SUMMARY TABLE                     ║");
+    println!("╠══════════════════════════════════════════════════════╣");
+    println!("║ {:<15} {:>8} {:>8} {:>12}   ║", "Model", "Params", "Memory", "Best Val Loss");
+    println!("╠══════════════════════════════════════════════════════╣");
+
     let fp32 = HNNFP32::new(1, hidden, n_layers, 42);
     let ternary = HNNTernary::new(1, hidden, n_layers, 42);
     let adaptive = HNNAdaptive::new(1, hidden, n_layers, 42);
     let mlp = MLPFP32::new(1, hidden, n_layers, 42);
-    println!("{:<15} {:>10} {:>8}B", "HNN-FP32", fp32.param_count(), fp32.memory_bytes());
-    println!("{:<15} {:>10} {:>8}B", "HNN-Ternary", ternary.param_count(), ternary.memory_bytes());
-    println!("{:<15} {:>10} {:>8}B", "HNN-Adaptive", adaptive.param_count(), adaptive.memory_bytes());
-    println!("{:<15} {:>10} {:>8}B", "MLP-FP32", mlp.param_count(), mlp.memory_bytes());
+
+    println!("║ {:<15} {:>8} {:>6}B {:>12}   ║", "HNN-FP32", fp32.param_count(), fp32.memory_bytes(), "see CSV");
+    println!("║ {:<15} {:>8} {:>6}B {:>12}   ║", "HNN-Ternary", ternary.param_count(), ternary.memory_bytes(), "see CSV");
+    println!("║ {:<15} {:>8} {:>6}B {:>12}   ║", "HNN-Adaptive", adaptive.param_count(), adaptive.memory_bytes(), "see CSV");
+    println!("║ {:<15} {:>8} {:>6}B {:>12}   ║", "MLP-FP32", mlp.param_count(), mlp.memory_bytes(), "see CSV");
+    println!("╚══════════════════════════════════════════════════════╝");
+
+    let total_runs = train_results.len();
+    let total_time: f64 = train_results.iter().map(|r| r.train_seconds).sum();
+    println!("\nTotal: {} training runs in {:.0}s ({:.1} min)",
+        total_runs, total_time, total_time / 60.0);
     println!("\n✅ Full experiment complete!");
 }
