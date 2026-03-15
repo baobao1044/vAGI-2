@@ -21,4 +21,4 @@ jobs:
       - name: Test
         run: cargo test --workspace
       - name: Clippy
-        run: cargo clippy --workspace -- -D warnings -A clippy::should_implement_trait -A clippy::needless_range_loop
+        run: cargo clippy --workspace -- -D warnings -A clippy::should_implement_trait -A clippy::needless_range_loop -A clippy::type_complexity
