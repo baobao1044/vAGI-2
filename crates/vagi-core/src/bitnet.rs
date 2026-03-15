@@ -1,9 +1,10 @@
 //! BitNet blocks — ternary neural network building blocks.
 //!
 //! All weights are ternary {-1, 0, +1}. Activations remain f32.
-//! Matrix multiplications use conditional add/subtract only (no float multiply).
+//! Matrix multiplications use packed ternary matvec (addition-only).
 
 use crate::error::VagiError;
+use crate::ternary::{TernaryMatrix, ternary_matvec};
 use rand::Rng;
 
 /// Model configuration.
@@ -34,7 +35,6 @@ impl BitNetConfig {
 
     /// Estimated parameter count.
     pub fn param_count(&self) -> usize {
-        // Rough estimate: 4 * d_model^2 per layer (Q,K,V,O) + 2 * d_model * ffn_dim (FFN)
         let attn_params = 4 * self.d_model * self.d_model;
         let ffn_params = 2 * self.d_model * self.ffn_dim;
         self.n_layers * (attn_params + ffn_params) + self.vocab_size * self.d_model
@@ -52,7 +52,6 @@ pub struct RMSNorm {
 }
 
 impl RMSNorm {
-    /// Create a new RMSNorm with all-ones scale.
     pub fn new(dim: usize) -> Self {
         Self {
             weight: vec![1.0; dim],
@@ -60,12 +59,9 @@ impl RMSNorm {
         }
     }
 
-    /// Forward pass (in-place).
     pub fn forward(&self, x: &mut [f32]) {
         let n = x.len();
-        if n == 0 {
-            return;
-        }
+        if n == 0 { return; }
         let sum_sq: f32 = x.iter().map(|v| v * v).sum();
         let rms = (sum_sq / n as f32 + self.eps).sqrt();
         let inv_rms = 1.0 / rms;
@@ -74,20 +70,17 @@ impl RMSNorm {
         }
     }
 
-    /// Dimension of this norm layer.
-    pub fn dim(&self) -> usize {
-        self.weight.len()
-    }
+    pub fn dim(&self) -> usize { self.weight.len() }
 }
 
-/// BitNet linear layer with ternary weights.
+/// BitNet linear layer with packed ternary weights.
 ///
-/// Stores weights as f32 for now (will be replaced with TernaryMatrix
-/// for production). Forward: y = W * quantize(x) + bias.
+/// Weights stored as TernaryMatrix (2-bit packed, ~16× smaller than f32).
+/// Forward: y = scale * Σ ternary(W) * x + bias (addition-only inner loop).
 #[derive(Clone, Debug)]
 pub struct BitNetLinear {
-    /// Weight matrix [out_features × in_features], stored row-major.
-    pub weight: Vec<f32>,
+    /// Packed ternary weight matrix [out_features × in_features].
+    packed: TernaryMatrix,
     /// Optional bias [out_features].
     pub bias: Option<Vec<f32>>,
     pub in_features: usize,
@@ -98,43 +91,34 @@ impl BitNetLinear {
     /// Create with random ternary weights.
     pub fn new(in_features: usize, out_features: usize, use_bias: bool) -> Self {
         let mut rng = rand::thread_rng();
-        let weight: Vec<f32> = (0..out_features * in_features)
+        let ternary: Vec<i8> = (0..out_features * in_features)
             .map(|_| match rng.gen_range(0u8..3) {
-                0 => -1.0,
-                1 => 0.0,
-                _ => 1.0,
+                0 => -1i8,
+                1 => 0,
+                _ => 1,
             })
             .collect();
-        let bias = if use_bias {
-            Some(vec![0.0; out_features])
-        } else {
-            None
-        };
-        Self {
-            weight,
-            bias,
-            in_features,
-            out_features,
-        }
+        let packed = TernaryMatrix::from_ternary(&ternary, out_features, in_features);
+        let bias = if use_bias { Some(vec![0.0; out_features]) } else { None };
+        Self { packed, bias, in_features, out_features }
     }
 
-    /// Create with zeros.
+    /// Create with all-zero weights.
     pub fn zeros(in_features: usize, out_features: usize, use_bias: bool) -> Self {
-        let weight = vec![0.0; out_features * in_features];
-        let bias = if use_bias {
-            Some(vec![0.0; out_features])
-        } else {
-            None
-        };
-        Self {
-            weight,
-            bias,
-            in_features,
-            out_features,
-        }
+        let packed = TernaryMatrix::zeros(out_features, in_features);
+        let bias = if use_bias { Some(vec![0.0; out_features]) } else { None };
+        Self { packed, bias, in_features, out_features }
     }
 
-    /// Forward pass: y = W * x + bias.
+    /// Create from an existing TernaryMatrix.
+    pub fn from_packed(packed: TernaryMatrix, use_bias: bool) -> Self {
+        let out_features = packed.rows();
+        let in_features = packed.cols();
+        let bias = if use_bias { Some(vec![0.0; out_features]) } else { None };
+        Self { packed, bias, in_features, out_features }
+    }
+
+    /// Forward pass: y = W * x + bias, using packed ternary matvec.
     pub fn forward(&self, x: &[f32], y: &mut [f32]) -> Result<(), VagiError> {
         if x.len() != self.in_features {
             return Err(VagiError::ShapeMismatch {
@@ -148,24 +132,31 @@ impl BitNetLinear {
                 got: format!("{}", y.len()),
             });
         }
-        for i in 0..self.out_features {
-            let mut sum = 0.0f32;
-            let row_start = i * self.in_features;
-            for j in 0..self.in_features {
-                let w = self.weight[row_start + j];
-                // Ternary: only add/subtract, skip zeros
-                if w > 0.5 {
-                    sum += x[j];
-                } else if w < -0.5 {
-                    sum -= x[j];
-                }
+
+        ternary_matvec(&self.packed, x, y);
+
+        if let Some(ref bias) = self.bias {
+            for (yi, bi) in y.iter_mut().zip(bias.iter()) {
+                *yi += bi;
             }
-            if let Some(ref bias) = self.bias {
-                sum += bias[i];
-            }
-            y[i] = sum;
         }
         Ok(())
+    }
+
+    /// Get a single weight value as f32 (-1.0, 0.0, or +1.0).
+    /// Used for gradient backpropagation through frozen ternary weights.
+    #[inline]
+    pub fn get_weight(&self, row: usize, col: usize) -> f32 {
+        self.packed.get(row, col) as f32
+    }
+
+    /// Access the underlying TernaryMatrix.
+    pub fn packed(&self) -> &TernaryMatrix { &self.packed }
+
+    /// Memory usage in bytes.
+    pub fn memory_bytes(&self) -> usize {
+        self.packed.memory_bytes()
+            + self.bias.as_ref().map_or(0, |b| b.len() * 4)
     }
 }
 
@@ -187,7 +178,6 @@ pub struct BitNetBlock {
 }
 
 impl BitNetBlock {
-    /// Create a new BitNet block.
     pub fn new(d_model: usize, ffn_dim: usize) -> Self {
         Self {
             norm: RMSNorm::new(d_model),
@@ -198,7 +188,6 @@ impl BitNetBlock {
         }
     }
 
-    /// Forward pass with residual connection (in-place on x).
     pub fn forward(&self, x: &mut [f32]) -> Result<(), VagiError> {
         if x.len() != self.d_model {
             return Err(VagiError::ShapeMismatch {
@@ -206,33 +195,24 @@ impl BitNetBlock {
                 got: format!("{}", x.len()),
             });
         }
-        // Save residual
         let residual: Vec<f32> = x.to_vec();
-
-        // RMSNorm
         self.norm.forward(x);
 
-        // FFN up: d_model → ffn_dim
         let mut hidden = vec![0.0f32; self.ffn_dim];
         self.ffn_up.forward(x, &mut hidden)?;
 
-        // SiLU activation
         for h in hidden.iter_mut() {
             *h = silu(*h);
         }
 
-        // FFN down: ffn_dim → d_model
         self.ffn_down.forward(&hidden, x)?;
 
-        // Residual connection
         for (xi, ri) in x.iter_mut().zip(residual.iter()) {
             *xi += ri;
         }
-
         Ok(())
     }
 
-    /// Forward pass returning new vector (non-mutating).
     pub fn forward_vec(&self, input: &[f32]) -> Result<Vec<f32>, VagiError> {
         let mut output = input.to_vec();
         self.forward(&mut output)?;
@@ -270,7 +250,6 @@ mod tests {
         let input = vec![1.0f32; 64];
         let output = block.forward_vec(&input).unwrap();
         assert_eq!(output.len(), 64);
-        // Output should differ from input due to FFN processing
         assert!(output != input);
     }
 
@@ -278,8 +257,28 @@ mod tests {
     fn test_config_param_count() {
         let config = BitNetConfig::small_100m();
         let count = config.param_count();
-        // Should be roughly 100M
         assert!(count > 50_000_000, "Param count too low: {count}");
         assert!(count < 200_000_000, "Param count too high: {count}");
+    }
+
+    #[test]
+    fn test_get_weight() {
+        let linear = BitNetLinear::new(4, 2, false);
+        for r in 0..2 {
+            for c in 0..4 {
+                let w = linear.get_weight(r, c);
+                assert!(w == -1.0 || w == 0.0 || w == 1.0,
+                    "Weight at ({r},{c}) should be ternary, got {w}");
+            }
+        }
+    }
+
+    #[test]
+    fn test_memory_savings() {
+        let linear = BitNetLinear::new(768, 3072, false);
+        let mem = linear.memory_bytes();
+        let f32_mem = 768 * 3072 * 4;
+        let ratio = f32_mem as f64 / mem as f64;
+        assert!(ratio > 10.0, "Should be >10× smaller, got {ratio:.1}×");
     }
 }

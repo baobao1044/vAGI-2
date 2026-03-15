@@ -58,7 +58,7 @@ fn adaptive_train_step(
     for i in 0..block.ffn_dim {
         let mut sum = 0.0f32;
         for j in 0..block.d_model.min(grad_output.len()) {
-            let w = block.ffn_down.weight[j * block.ffn_dim + i];
+            let w = block.ffn_down.get_weight(j, i);
             if w > 0.5 { sum += grad_output[j]; }
             else if w < -0.5 { sum -= grad_output[j]; }
         }

@@ -7,7 +7,9 @@
 pub mod adaptive;
 pub mod bitnet;
 pub mod error;
+pub mod ternary;
 
 pub use adaptive::{AdaptiveBasis, AdaptiveBlock, BasisConfig, BasisScheduler, N_BASIS, BASIS_NAMES};
 pub use bitnet::{BitNetBlock, BitNetConfig, BitNetLinear, RMSNorm};
 pub use error::VagiError;
+pub use ternary::{TernaryMatrix, ternary_matvec, ternary_matvec_scalar};
