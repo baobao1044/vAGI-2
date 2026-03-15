@@ -4,9 +4,9 @@
 > combining symbolic mathematics with physics-grounded world models and  
 > a novel training protocol (GENESIS).
 
+[![CI](https://github.com/baobao1044/vAGI-2/actions/workflows/ci.yml/badge.svg)](https://github.com/baobao1044/vAGI-2/actions)
 [![Rust](https://img.shields.io/badge/rust-1.94+-orange.svg)](https://www.rust-lang.org)
-[![Tests](https://img.shields.io/badge/tests-67%2F67-brightgreen.svg)]()
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)]()
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 
@@ -177,8 +177,8 @@ The learned weight matrix `[[0.9999, 0.010], [-0.010, 1.000]]` matches the analy
 
 ```bash
 # Clone
-git clone https://github.com/your-org/BDC-AI.git
-cd BDC-AI
+git clone https://github.com/baobao1044/vAGI-2.git
+cd vAGI-2
 
 # Build all crates
 cargo build --workspace
@@ -192,6 +192,12 @@ cargo test -p vagi-train --test vertical_slice -- --nocapture
 # Lint
 cargo clippy --workspace
 ```
+
+---
+
+## Roadmap
+
+See [plan.md](plan.md) for the full project roadmap and architectural specification.
 
 ---
 
