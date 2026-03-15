@@ -87,7 +87,7 @@ impl LinearTernary {
 
     fn memory_bytes_quantized(&self) -> usize {
         // Ternary: 2 bits per weight
-        (self.w_latent.len() * 2 + 7) / 8 + self.b.len() * 4
+        (self.w_latent.len() * 2).div_ceil(8) + self.b.len() * 4
     }
 }
 

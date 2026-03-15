@@ -4,6 +4,9 @@
 //!   cargo run --release -- run-all     # Full experiment
 //!   cargo run --release -- quick       # Quick smoke test
 
+#![allow(dead_code)]
+#![allow(clippy::too_many_arguments)]
+
 mod backprop;
 mod evaluator;
 mod ground_truth;

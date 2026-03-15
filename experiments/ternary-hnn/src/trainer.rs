@@ -135,7 +135,7 @@ pub fn train_hnn_fp32(
     for epoch in 0..config.max_epochs {
         // Mini-batch gradient step
         let batch = sample_batch(&train_pairs, config.batch_size, &mut rng);
-        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&&ref p| p.clone()).collect();
+        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&p| p.clone()).collect();
         model.update_weights(&batch_owned, config.learning_rate);
 
         // Evaluate every print_every or at important epochs
@@ -203,7 +203,7 @@ pub fn train_hnn_ternary(
 
     for epoch in 0..config.max_epochs {
         let batch = sample_batch(&train_pairs, config.batch_size, &mut rng);
-        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&&ref p| p.clone()).collect();
+        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&p| p.clone()).collect();
         // STE: update_weights perturbs latent f32 weights, forward auto-quantizes
         model.update_weights(&batch_owned, config.learning_rate);
 
@@ -271,7 +271,7 @@ pub fn train_hnn_adaptive(
 
     for epoch in 0..config.max_epochs {
         let batch = sample_batch(&train_pairs, config.batch_size, &mut rng);
-        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&&ref p| p.clone()).collect();
+        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&p| p.clone()).collect();
 
         // AdaptiveBasis warmup: only update weights (not basis) for first N epochs
         if epoch < config.basis_warmup_epochs {
@@ -346,7 +346,7 @@ pub fn train_mlp_fp32(
 
     for epoch in 0..config.max_epochs {
         let batch = sample_batch(&train_pairs, config.batch_size, &mut rng);
-        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&&ref p| p.clone()).collect();
+        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&p| p.clone()).collect();
         model.update_weights(&batch_owned, config.learning_rate);
 
         if epoch % config.print_every == 0 || epoch == config.max_epochs - 1 {
@@ -427,7 +427,7 @@ pub fn train_analytical_fp32(
 
     for epoch in 0..config.max_epochs {
         let batch = sample_batch(&train_pairs, config.batch_size, &mut rng);
-        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&&ref p| p.clone()).collect();
+        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&p| p.clone()).collect();
 
         let grad = backprop::loss_gradient_fp32(model, &batch_owned);
         backprop::apply_gradient_fp32(model, &grad, config.learning_rate);
@@ -489,7 +489,7 @@ pub fn train_analytical_ternary(
 
     for epoch in 0..config.max_epochs {
         let batch = sample_batch(&train_pairs, config.batch_size, &mut rng);
-        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&&ref p| p.clone()).collect();
+        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&p| p.clone()).collect();
 
         let grad = backprop::loss_gradient_ternary(model, &batch_owned);
         backprop::apply_gradient_ternary(model, &grad, config.learning_rate);
@@ -550,7 +550,7 @@ pub fn train_analytical_adaptive(
 
     for epoch in 0..config.max_epochs {
         let batch = sample_batch(&train_pairs, config.batch_size, &mut rng);
-        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&&ref p| p.clone()).collect();
+        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&p| p.clone()).collect();
 
         let (weight_grad, basis_grad) = backprop::loss_gradient_adaptive(model, &batch_owned);
 
@@ -618,7 +618,7 @@ pub fn train_analytical_mlp(
 
     for epoch in 0..config.max_epochs {
         let batch = sample_batch(&train_pairs, config.batch_size, &mut rng);
-        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&&ref p| p.clone()).collect();
+        let batch_owned: Vec<(Vec<f32>, Vec<f32>)> = batch.iter().map(|&p| p.clone()).collect();
 
         let grad = backprop::loss_gradient_mlp(model, &batch_owned);
         backprop::apply_gradient_mlp(model, &grad, config.learning_rate);
