@@ -19,6 +19,13 @@ vagi-train
         ├── vagi-math
         └── vagi-core
 
+vagi-lm
+    └── vagi-core (STELinear, AdaptiveBasis, RMSNorm)
+
+vagi-chat
+    ├── vagi-lm
+    └── vagi-core
+
 vagi-world
     └── petgraph
 ```
@@ -158,6 +165,55 @@ cycle(input):
 
 CycleMetrics: `{surprise, gate_value, aux_loss, cycle_count}`
 
+### Layer 6: Language Model (`vagi-lm`)
+
+Byte-level ternary transformer for text generation and training.
+
+**Architecture:**
+- `ByteTokenizer`: UTF-8 byte-level tokenization (vocab=259: 256 bytes + BOS/EOS/PAD)
+- `Embedding`: Token → d_model vector lookup table
+- `TransformerLayer`: Pre-norm (RMSNorm) → CausalAttention (RoPE + multi-head) → FFN (STELinear + AdaptiveBasis)
+- `VagiLM`: Stacked transformer with final RMSNorm → STELinear LM head
+
+**Training (`LMTrainer`):**
+- AdamW optimizer with per-parameter first/second moment estimates
+- LR warmup (linear) + cosine decay schedule
+- Label smoothing (distributes probability mass across vocab)
+- Gradient clipping (max-norm)
+- Backpropagation through all layers using latent f32 weights (not quantized ternary)
+- Per-step metrics: loss, perplexity, token accuracy, effective LR
+
+**Key types:**
+
+| Type | Description |
+|------|-------------|
+| `VagiLM` | Full language model: embedding + N transformer layers + LM head |
+| `LMConfig` | Model config: `tiny()` (d=64, 4 layers), `small()`, `base()` |
+| `LMTrainer` | AdamW trainer with optimizer state for all model parameters |
+| `AdvancedConfig` | Training config: lr, beta1/2, weight_decay, warmup, label_smoothing |
+| `TrainMetrics` | Per-step output: loss, perplexity, accuracy, lr |
+| `TextDataset` | Tokenize text → overlapping sequences for training |
+
+### Layer 7: Chat Interface (`vagi-chat`)
+
+Multi-turn dialogue system built on `vagi-lm`.
+
+**ChatSession:**
+- History tracking with `Role` (System/User/Assistant)
+- Context window management with truncation
+- Response generation using configurable sampling strategies
+
+**Sampling strategies:**
+- `top_k_sample(logits, k)`: Restrict to top-K most probable tokens
+- `top_p_sample(logits, p)`: Nucleus sampling (cumulative probability threshold)
+- `apply_repetition_penalty(logits, recent_tokens, penalty)`: Penalize repeated tokens
+- Temperature scaling: `logit / temperature` before softmax
+
+**Config presets:**
+- `default()`: temperature=0.8, top_k=50, top_p=0.95
+- `greedy()`: temperature=0.0 (argmax)
+- `creative()`: temperature=1.2, top_k=100, top_p=0.98
+
 ---
 
 ## Data Flow
@@ -195,4 +251,6 @@ Final Output + CycleMetrics
 | vagi-world | 9 | DAG validation, topological order, intervention propagation, planning |
 | vagi-runtime | 9 | OODA cycle, batch run, surprise detection, expert usage tracking |
 | vagi-train | 6+1 | GENESIS stages, vertical slice end-to-end |
-| **Total** | **208** | |
+| vagi-lm | 37 | AdamW vs SGD benchmark, RMSNorm gradient check, multi-pattern learning, accuracy convergence |
+| vagi-chat | 13 | Session management, sampling strategies, history tracking, config presets |
+| **Total** | **258** | |

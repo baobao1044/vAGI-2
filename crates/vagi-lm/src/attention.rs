@@ -10,9 +10,9 @@ use vagi_core::ste::STELinear;
 #[derive(Clone, Debug)]
 pub struct RoPECache {
     /// cos values [max_seq_len × head_dim/2]
-    cos: Vec<f32>,
+    pub(crate) cos: Vec<f32>,
     /// sin values [max_seq_len × head_dim/2]
-    sin: Vec<f32>,
+    pub(crate) sin: Vec<f32>,
     head_dim: usize,
     max_len: usize,
 }

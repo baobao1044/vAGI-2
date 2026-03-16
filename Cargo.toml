@@ -11,6 +11,7 @@ members = [
     "crates/vagi-world",
     "crates/vagi-runtime",
     "crates/vagi-train",
+    "crates/vagi-chat",
     "experiments/ternary-hnn",
 ]
 

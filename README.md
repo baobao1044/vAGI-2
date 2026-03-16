@@ -7,7 +7,7 @@
 
 [![CI](https://github.com/baobao1044/vAGI-2/actions/workflows/ci.yml/badge.svg)](https://github.com/baobao1044/vAGI-2/actions)
 [![Rust](https://img.shields.io/badge/rust-1.94+-orange.svg)](https://www.rust-lang.org)
-[![Tests](https://img.shields.io/badge/tests-208_passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-258_passing-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
@@ -44,25 +44,25 @@ This mirrors how physicists actually develop understanding: observe phenomena, f
 │                     vagi-runtime                            │
 │                   (OODA loop agent)                          │
 ├──────────────┬──────────────┬──────────────┬────────────────┤
-│  vagi-reason │  vagi-world  │  vagi-train  │                │
-│  (sparse MoE │ (causal DAG  │  (GENESIS    │                │
-│   + predict  │  + planner)  │   protocol)  │                │
-│   gate)      │              │              │                │
-├──────────────┼──────────────┼──────────────┤                │
-│  vagi-memory │  vagi-math   │ vagi-physics │                │
-│  (streaming  │ (symbolic    │ (Hamiltonian │                │
-│   state +    │  algebra +   │  + microworlds│                │
-│   2-phase    │  calculus)   │  + units)    │                │
+│  vagi-reason │  vagi-world  │  vagi-train  │   vagi-chat    │
+│  (sparse MoE │ (causal DAG  │  (GENESIS    │  (multi-turn   │
+│   + predict  │  + planner)  │   protocol)  │   dialogue +   │
+│   gate)      │              │              │   sampling)    │
+├──────────────┼──────────────┼──────────────┼────────────────┤
+│  vagi-memory │  vagi-math   │ vagi-physics │    vagi-lm     │
+│  (streaming  │ (symbolic    │ (Hamiltonian │  (transformer  │
+│   state +    │  algebra +   │  + microworlds│  + AdamW +    │
+│   2-phase    │  calculus)   │  + units)    │   backprop)    │
 │   attention) │              │              │                │
-├──────────────┴──────────────┴──────────────┤                │
-│              vagi-hdc                      │                │
-│    (10,240-bit hypervectors + SQLite       │                │
-│     memory + forgetting + parallel query)  │                │
-├────────────────────────────────────────────┤                │
-│              vagi-core                     │                │
-│  (BitNet, AdaptiveBasis, TernaryMatrix,    │                │
-│   SIMD matvec, STE training)              │                │
-└────────────────────────────────────────────┘
+├──────────────┴──────────────┴──────────────┴────────────────┤
+│              vagi-hdc                                       │
+│    (10,240-bit hypervectors + SQLite                        │
+│     memory + forgetting + parallel query)                   │
+├─────────────────────────────────────────────────────────────┤
+│              vagi-core                                      │
+│  (BitNet, AdaptiveBasis, TernaryMatrix,                     │
+│   SIMD matvec, STE training)                                │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -80,7 +80,9 @@ This mirrors how physicists actually develop understanding: observe phenomena, f
 | **[vagi-reason](crates/vagi-reason)** | Energy-based MoE routing (top-K sparse compute, ~95% sparsity), per-expert AdaptiveBasis, PredictiveGate (surprise-driven gating) | 3 | 16 |
 | **[vagi-world](crates/vagi-world)** | Causal graph (petgraph DAG), intervention analysis, topological reasoning, goal-directed planner (A* with heuristic) | 2 | 9 |
 | **[vagi-runtime](crates/vagi-runtime)** | OODA loop agent: Observe (streaming state) → Orient (memory) → Decide (MoE + gate) → Act (output), surprise detection, expert usage tracking | 1 | 9 |
-| | **Total** | **50** | **208** |
+| **[vagi-lm](crates/vagi-lm)** | Byte-level ternary language model: transformer (STELinear + AdaptiveBasis), RoPE attention, AdamW training with LR scheduling, label smoothing, backpropagation through STE | 8 | 37 |
+| **[vagi-chat](crates/vagi-chat)** | Conversational interface: multi-turn ChatSession, top-k/top-p sampling, repetition penalty, configurable generation (temperature, system prompts) | 4 | 13 |
+| | **Total** | **62** | **258** |
 
 ---
 
@@ -158,7 +160,40 @@ Observe → Orient → Decide → Act → (repeat)
 
 End-to-end pipeline wiring all layers. Surprise detection, expert usage tracking, batch processing.
 
-### 8. GENESIS Training Protocol (`vagi-train`)
+### 8. Language Model (`vagi-lm`)
+
+Byte-level ternary transformer language model with full training infrastructure:
+
+- **Architecture**: Embedding → STELinear Transformer layers (RoPE attention + AdaptiveBasis FFN) → LM head
+- **Training**: AdamW optimizer with per-parameter momentum, LR warmup + cosine decay, label smoothing
+- **Backpropagation**: Full backprop through all layers via STE, using latent f32 weights for gradient flow
+- **Dataset**: `TextDataset` for tokenization, overlapping sequence generation, shuffling
+
+```rust
+use vagi_lm::{VagiLM, LMConfig, LMTrainer, AdvancedConfig};
+
+let mut model = VagiLM::new(LMConfig::tiny());
+let mut trainer = LMTrainer::new(&model, AdvancedConfig::default());
+let metrics = trainer.train_step(&mut model, &tokens);
+// metrics.loss=0.88, metrics.accuracy=100%, metrics.perplexity=2.42
+```
+
+### 9. Chat Interface (`vagi-chat`)
+
+Multi-turn conversational interface with advanced sampling:
+
+- **ChatSession**: Dialogue history, context building, system prompts
+- **Sampling**: Top-K, Top-P (nucleus), repetition penalty, temperature control
+- **Presets**: `greedy()`, `creative()`, `default()`
+
+```rust
+use vagi_chat::{ChatSession, ChatConfig};
+
+let mut session = ChatSession::new(model, ChatConfig::default());
+let response = session.send("Hello!");
+```
+
+### 10. GENESIS Training Protocol (`vagi-train`)
 
 | Stage | Name | What happens |
 |-------|------|-------------|
@@ -168,7 +203,7 @@ End-to-end pipeline wiring all layers. Surprise detection, expert usage tracking
 | 4 | **Compose** | Solve problems requiring multiple concepts |
 | 5 | **Consolidate** | Sleep phase: prune, compress (MDL), replay dreams |
 
-### 9. Causal World Model (`vagi-world`)
+### 11. Causal World Model (`vagi-world`)
 
 - **CausalGraph**: petgraph-backed DAG with labeled nodes and weighted edges
 - **Intervention**: Set a node's value, propagate downstream via causal structure
@@ -195,8 +230,11 @@ cd vAGI-2
 # Build all crates
 cargo build --workspace
 
-# Run all 208 tests
+# Run all 258 tests
 cargo test --workspace
+
+# Run language model training tests
+cargo test -p vagi-lm -- --nocapture training
 
 # Run the vertical slice demo (shows training output)
 cargo test -p vagi-train --test vertical_slice -- --nocapture
@@ -217,6 +255,9 @@ cargo clippy --workspace -- -D warnings
 | HDC 10K query_topk(32) | **31ms** |
 | StreamingState 100K tokens | **constant memory** |
 | MoE sparsity (top-1/20) | **95%** |
+| LM AdamW training (200 steps, "ABCABC") | **98.1% loss reduction, 100% accuracy** |
+| LM SGD training (200 steps) | **98.9% loss reduction** |
+| LM multi-pattern learning (4 patterns) | **78.8% loss reduction** |
 
 ---
 
@@ -237,6 +278,8 @@ cargo clippy --workspace -- -D warnings
 | Causal world model | ✅ Complete | 6 |
 | Goal-directed planner | ✅ Complete | 3 |
 | OODA runtime loop | ✅ Complete | 9 |
+| Language model (transformer + train) | ✅ Complete | 37 |
+| Chat interface (sampling + session) | ✅ Complete | 13 |
 | Vertical slice MVP | ✅ Complete | 1 |
 | Tier 2+ microworlds | 🔲 Planned | — |
 | Python bindings (PyO3) | 🔲 Planned | — |

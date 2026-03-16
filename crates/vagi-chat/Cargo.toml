@@ -1,0 +1,12 @@
+[package]
+name = "vagi-chat"
+version = "0.1.0"
+edition = "2021"
+description = "Conversational interface for vAGI v2 — chat sessions with sampling strategies"
+
+[dependencies]
+vagi-lm = { path = "../vagi-lm" }
+vagi-core = { path = "../vagi-core" }
+rand = { workspace = true }
+
+[dev-dependencies]
