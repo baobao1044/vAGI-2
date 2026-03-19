@@ -13,7 +13,7 @@
 //! - Faster updates (no sqrt, no division)
 //! - Works well with ternary weights (direction > magnitude)
 
-use crate::{VagiLM, LMConfig};
+use crate::VagiLM;
 use crate::fast_train::{f32_forward_backward, GradBuffer};
 use rayon::prelude::*;
 
@@ -91,7 +91,7 @@ impl SignSGDTrainer {
     /// Apply sign(gradient) update to parameters.
     fn sign_update(&mut self, params: &mut [f32], grads: &[f32], lr: f32, wd: f32, batch_size: f32) {
         let scale = 1.0 / batch_size;
-        if let Some(ref mut momentum) = self.momentum {
+        if let Some(ref mut _momentum) = self.momentum {
             // This is a simplification — we reuse the grad buffer structure
             // In practice, momentum is tracked per-parameter
         }

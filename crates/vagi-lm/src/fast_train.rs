@@ -155,7 +155,7 @@ pub fn f32_forward_backward(
         let src = &model.embedding.weight[tok as usize * d..(tok as usize + 1) * d];
         hidden[t * d..(t + 1) * d].copy_from_slice(src);
     }
-    let embed_out = hidden.clone();
+    let _embed_out = hidden.clone();
 
     // 2. Transformer layers
     let mut layer_inputs: Vec<Vec<f32>> = Vec::with_capacity(model.layers.len());
@@ -240,7 +240,7 @@ pub fn f32_forward_backward(
         for i in 0..seq_len*d { hidden[i] += proj_out[i]; }
 
         // FFN sub-block
-        let ffn_input = hidden.clone();
+        let _ffn_input = hidden.clone();
         let mut ffn_norm = hidden.clone();
         for t in 0..seq_len {
             rmsnorm_fwd(&mut ffn_norm[t*d..(t+1)*d], &layer.ffn_norm.weight, layer.ffn_norm.eps);
@@ -533,7 +533,7 @@ pub fn apply_gradients(
     eps: f32,
     weight_decay: f32,
 ) {
-    let d = model.config.d_model;
+    let _d = model.config.d_model;
 
     // Helper: AdamW update for a parameter slice
     let mut offset = 0usize;

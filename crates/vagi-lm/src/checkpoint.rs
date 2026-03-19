@@ -294,7 +294,8 @@ mod tests {
     fn test_save_load_model() {
         let config = LMConfig::tiny();
         let model = VagiLM::new(config);
-        let path = "target/test_model.ckpt";
+        let path = std::env::temp_dir().join("vagi_test_model.ckpt");
+        let path = path.to_str().unwrap();
         save_model(&model, path).unwrap();
         let loaded = load_model(path).unwrap();
         assert_eq!(loaded.config.d_model, model.config.d_model);
@@ -320,7 +321,8 @@ mod tests {
         trainer.adam_m[0] = 1.23;
         trainer.adam_v[0] = 4.56;
 
-        let path = "target/test_ckpt.ckpt";
+        let path = std::env::temp_dir().join("vagi_test_ckpt.ckpt");
+        let path = path.to_str().unwrap();
         save_checkpoint(&model, &trainer, path).unwrap();
 
         let (loaded_model, loaded_trainer) = load_checkpoint(path, adv).unwrap();

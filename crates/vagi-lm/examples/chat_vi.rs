@@ -27,7 +27,7 @@ const YELLOW: &str = "\x1b[33m";
 const MAGENTA: &str = "\x1b[35m";
 const BLUE: &str = "\x1b[34m";
 const RED: &str = "\x1b[31m";
-const BG_DARK: &str = "\x1b[48;5;235m";
+const _BG_DARK: &str = "\x1b[48;5;235m";
 const WHITE: &str = "\x1b[97m";
 
 fn clear_screen() {

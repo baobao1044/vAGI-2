@@ -145,7 +145,7 @@ fn train_curriculum(
     println!();
     flush();
 
-    let mut global_step = 0usize;
+    let mut _global_step = 0usize;
     let mut rng = rand::thread_rng();
 
     for (phase_idx, (seq_len, phase_epochs)) in phases.iter().enumerate() {

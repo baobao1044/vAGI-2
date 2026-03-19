@@ -7,7 +7,7 @@
 //!   cargo run --example eval_vietnamese -p vagi-lm --release
 
 use std::io::Write;
-use vagi_lm::{VagiLM, LMConfig, TextDataset};
+use vagi_lm::{VagiLM, TextDataset};
 use vagi_lm::tokenizer::ByteTokenizer;
 use vagi_lm::checkpoint;
 use vagi_lm::eval;
