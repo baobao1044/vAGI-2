@@ -6,6 +6,7 @@ description = "BitNet ops, tensor primitives, SIMD — foundation layer for vAGI
 
 [dependencies]
 rand = { workspace = true }
+rayon = { workspace = true }
 serde = { workspace = true }
 safetensors = { workspace = true }
 thiserror = { workspace = true }

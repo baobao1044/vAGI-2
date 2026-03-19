@@ -43,6 +43,12 @@ impl Embedding {
         out
     }
 
+    /// Look up embedding for a single token (owned copy).
+    #[inline]
+    pub fn forward_single(&self, token_id: u32) -> Vec<f32> {
+        self.forward_one(token_id).to_vec()
+    }
+
     /// Memory usage in bytes.
     pub fn memory_bytes(&self) -> usize {
         self.weight.len() * 4

@@ -9,9 +9,11 @@ pub mod bitnet;
 pub mod error;
 pub mod ste;
 pub mod ternary;
+pub mod simd_ternary;
 
 pub use adaptive::{AdaptiveBasis, AdaptiveBlock, BasisConfig, BasisScheduler, N_BASIS, BASIS_NAMES};
 pub use bitnet::{BitNetBlock, BitNetConfig, BitNetLinear, RMSNorm};
 pub use error::VagiError;
 pub use ste::{STELinear, STEQuantizer};
 pub use ternary::{TernaryMatrix, ternary_matvec, ternary_matvec_scalar};
+pub use simd_ternary::{ternary_matvec_simd, ternary_matvec_simd_parallel, has_avx2};

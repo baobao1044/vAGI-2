@@ -10,7 +10,7 @@
 use vagi_core::bitnet::RMSNorm;
 use vagi_core::ste::STELinear;
 use vagi_core::adaptive::AdaptiveBasis;
-use crate::attention::CausalAttention;
+use crate::attention::{CausalAttention, KVCache};
 
 /// Single transformer layer.
 #[derive(Clone, Debug)]
@@ -84,6 +84,37 @@ impl TransformerLayer {
             for j in 0..d {
                 h[t * d + j] += down[j];
             }
+        }
+
+        h
+    }
+
+    /// Cached forward for a SINGLE token.
+    ///
+    /// `x`: `[d_model]` — hidden state of new token.
+    /// `pos`: position index.
+    /// `cache`: KV cache for this layer.
+    ///
+    /// Returns: `[d_model]` output.
+    pub fn forward_cached(&self, x: &[f32], pos: usize, cache: &mut KVCache) -> Vec<f32> {
+        let d = self.d_model;
+
+        // Attention: norm → cached attention → residual
+        let mut normed = x.to_vec();
+        self.attn_norm.forward(&mut normed);
+        let attn_out = self.attention.forward_cached(&normed, pos, cache);
+        let mut h: Vec<f32> = x.iter().zip(attn_out.iter()).map(|(a, b)| a + b).collect();
+
+        // FFN: norm → up → activation → down → residual
+        let mut h_normed = h.clone();
+        self.ffn_norm.forward(&mut h_normed);
+        let mut up = vec![0.0f32; self.ffn_dim];
+        self.ffn_up.forward(&h_normed, &mut up);
+        self.activation.forward(&mut up);
+        let mut down = vec![0.0f32; d];
+        self.ffn_down.forward(&up, &mut down);
+        for j in 0..d {
+            h[j] += down[j];
         }
 
         h

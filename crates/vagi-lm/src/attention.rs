@@ -178,6 +178,118 @@ impl CausalAttention {
 
         final_out
     }
+
+    /// Cached forward: process a SINGLE new token using cached K/V from past tokens.
+    ///
+    /// `x_new`: `[d_model]` — the new token's hidden state.
+    /// `pos`: position index of this token in the sequence.
+    /// `cache`: mutable KV cache to read from and append to.
+    ///
+    /// Returns: `[d_model]` output for the new token.
+    pub fn forward_cached(&self, x_new: &[f32], pos: usize, cache: &mut KVCache) -> Vec<f32> {
+        let d = self.d_model;
+        let h = self.n_heads;
+        let hd = self.head_dim;
+
+        // Project Q, K, V for new token
+        let mut q = vec![0.0f32; d];
+        let mut k = vec![0.0f32; d];
+        let mut v = vec![0.0f32; d];
+        self.wq.forward(x_new, &mut q);
+        self.wk.forward(x_new, &mut k);
+        self.wv.forward(x_new, &mut v);
+
+        // Apply RoPE to Q and K
+        for head in 0..h {
+            let offset = head * hd;
+            self.rope.apply(&mut q[offset..offset + hd], pos);
+            self.rope.apply(&mut k[offset..offset + hd], pos);
+        }
+
+        // Append K, V to cache
+        cache.k_cache.extend_from_slice(&k);
+        cache.v_cache.extend_from_slice(&v);
+        cache.len += 1;
+
+        // Attention: query attends to all cached K/V (including current)
+        let mut attn_out = vec![0.0f32; d];
+        let n = cache.len; // number of cached positions (including current)
+
+        for head in 0..h {
+            let q_off = head * hd;
+
+            // Compute scores against all cached keys
+            let mut scores = Vec::with_capacity(n);
+            for ki in 0..n {
+                let k_off = ki * d + head * hd;
+                let mut dot = 0.0f32;
+                for j in 0..hd {
+                    dot += q[q_off + j] * cache.k_cache[k_off + j];
+                }
+                scores.push(dot / (hd as f32).sqrt());
+            }
+
+            // Softmax
+            let max_s = scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+            let exps: Vec<f32> = scores.iter().map(|&s| (s - max_s).exp()).collect();
+            let sum: f32 = exps.iter().sum();
+
+            // Weighted sum of values
+            for vi in 0..n {
+                let v_off = vi * d + head * hd;
+                let w = if sum > 0.0 { exps[vi] / sum } else { 0.0 };
+                for j in 0..hd {
+                    attn_out[q_off + j] += w * cache.v_cache[v_off + j];
+                }
+            }
+        }
+
+        // Output projection
+        let mut output = vec![0.0f32; d];
+        self.wo.forward(&attn_out, &mut output);
+        output
+    }
+}
+
+/// KV cache for fast autoregressive inference.
+///
+/// Stores K and V projections for all past tokens, enabling O(1)
+/// per-token computation instead of O(n) recomputation.
+#[derive(Clone)]
+pub struct KVCache {
+    /// Cached key projections [len × d_model] (flat).
+    pub(crate) k_cache: Vec<f32>,
+    /// Cached value projections [len × d_model] (flat).
+    pub(crate) v_cache: Vec<f32>,
+    /// Number of cached positions.
+    pub(crate) len: usize,
+    /// Model dimension.
+    d_model: usize,
+}
+
+impl KVCache {
+    /// Create empty cache for a layer.
+    pub fn new(d_model: usize, max_seq_len: usize) -> Self {
+        Self {
+            k_cache: Vec::with_capacity(max_seq_len * d_model),
+            v_cache: Vec::with_capacity(max_seq_len * d_model),
+            len: 0,
+            d_model,
+        }
+    }
+
+    /// Number of cached positions.
+    pub fn len(&self) -> usize { self.len }
+
+    /// Whether cache is empty.
+    pub fn is_empty(&self) -> bool { self.len == 0 }
+
+    /// Clear the cache.
+    pub fn clear(&mut self) {
+        self.k_cache.clear();
+        self.v_cache.clear();
+        self.len = 0;
+    }
 }
 
 #[cfg(test)]

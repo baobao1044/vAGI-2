@@ -14,3 +14,18 @@ Thumbs.db
 
 # Environment
 .env
+
+# Data & model checkpoints
+/data/
+*.bin
+*.parquet
+
+# Training output logs
+*_output.txt
+*_err.txt
+*_test.txt
+fast_test.txt
+train_speedtest.txt
+
+# BPE tokenizer data
+bpe_merges.txt

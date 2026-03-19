@@ -330,12 +330,69 @@ pub fn ternary_matvec_fast(w: &TernaryMatrix, x: &[f32], y: &mut [f32]) {
     }
 }
 
-/// Matrix-vector multiply with runtime dispatch.
+/// Matrix-vector multiply with multi-threaded dispatch.
 ///
-/// Uses mask-extract optimized kernel (fast on all x86_64).
-/// Falls back to scalar for correctness comparison.
+/// Uses rayon to parallelize across rows for large matrices.
+/// Falls back to single-threaded for small matrices.
 pub fn ternary_matvec(w: &TernaryMatrix, x: &[f32], y: &mut [f32]) {
-    ternary_matvec_fast(w, x, y);
+    if w.rows >= 64 {
+        ternary_matvec_parallel(w, x, y);
+    } else {
+        ternary_matvec_fast(w, x, y);
+    }
+}
+
+/// Multi-threaded ternary matvec using rayon.
+///
+/// Each chunk of rows is computed on a separate thread.
+/// Gives N× speedup on N-core CPUs for large matrices.
+pub fn ternary_matvec_parallel(w: &TernaryMatrix, x: &[f32], y: &mut [f32]) {
+    use rayon::prelude::*;
+
+    assert!(x.len() >= w.cols, "Input too short");
+    assert!(y.len() >= w.rows, "Output too short");
+
+    let u64s_per_row = w.u64s_per_row();
+    let data = &w.data;
+    let scale = &w.scale;
+    let cols = w.cols;
+    let rows = w.rows;
+
+    // Process rows in parallel
+    y[..rows].par_iter_mut().enumerate().for_each(|(m, y_m)| {
+        let mut acc = 0.0f32;
+        let row_start = m * u64s_per_row;
+
+        for wi in 0..u64s_per_row {
+            let packed = data[row_start + wi];
+            if packed == 0 { continue; }
+
+            let (pos_mask, neg_mask) = extract_masks(packed);
+            let base_col = wi * WEIGHTS_PER_U64;
+
+            let mut pm = pos_mask;
+            while pm != 0 {
+                let j = pm.trailing_zeros() as usize;
+                let col = base_col + j;
+                if col < cols {
+                    acc += x[col];
+                }
+                pm &= pm - 1;
+            }
+
+            let mut nm = neg_mask;
+            while nm != 0 {
+                let j = nm.trailing_zeros() as usize;
+                let col = base_col + j;
+                if col < cols {
+                    acc -= x[col];
+                }
+                nm &= nm - 1;
+            }
+        }
+
+        *y_m = acc * scale[m];
+    });
 }
 
 // ── Tests ─────────────────────────────────────────────────────

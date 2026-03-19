@@ -1,39 +1,22 @@
-# vAGI v2 — Mathematical Foundations & Advanced Training Architecture
+# vAGI-2 — CPU-First Ternary AGI Research Platform
 
-> A CPU-first artificial general intelligence research platform built in Rust,  
-> combining symbolic mathematics with physics-grounded world models,  
-> hyperdimensional memory, sparse mixture-of-experts reasoning,  
-> and a novel training protocol (GENESIS).
+> A CPU-first artificial general intelligence research platform built in Rust,
+> featuring ternary weights {-1, 0, +1}, BPE tokenization, SIMD-accelerated inference,
+> and a multi-crate architecture spanning symbolic math, physics simulation,
+> hyperdimensional memory, sparse reasoning, and language modeling.
 
-[![CI](https://github.com/baobao1044/vAGI-2/actions/workflows/ci.yml/badge.svg)](https://github.com/baobao1044/vAGI-2/actions)
-[![Rust](https://img.shields.io/badge/rust-1.94+-orange.svg)](https://www.rust-lang.org)
-[![Tests](https://img.shields.io/badge/tests-258_passing-brightgreen.svg)]()
+[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 
-## What Is This?
+## Highlights
 
-vAGI v2 is a research prototype exploring a fundamentally different approach to AGI:
-
-1. **Physics-first learning** — learn by experiencing simulated worlds, not by memorizing text
-2. **Symbolic + Neural reasoning** — neural networks propose solutions, symbolic engines verify them
-3. **Mathematical foundation** — build understanding from first principles (calculus, algebra, conservation laws)
-4. **CPU-efficient** — designed to run on commodity hardware using BitNet ternary weights {-1, 0, +1}
-5. **Hyperdimensional memory** — O(1) binary retrieval with SQLite persistence and forgetting curves
-6. **Sparse compute** — energy-based MoE routing with ~95% expert sparsity
-
-### The Core Idea
-
-Instead of training a language model on internet text and hoping intelligence emerges, we:
-
-```
-Simulated World → Experience → Discover Patterns → Formalize as Math → Compose → Verify
-         ↓              ↓              ↓                ↓              ↓         ↓
-   [vagi-physics] [vagi-memory]  [vagi-math]      [vagi-train]   [vagi-reason] [vagi-world]
-```
-
-This mirrors how physicists actually develop understanding: observe phenomena, find invariants, express them as equations, then compose known laws to predict new phenomena.
+- **Ternary Weights** — All linear layers use {-1, 0, +1} weights via BitNet. Multiplications become additions, enabling CPU-efficient inference
+- **CPU-First Training** — f32 batch-parallel training with AdamW + exact attention gradients, achieving **150+ sequences/second** on commodity CPUs
+- **AVX2 SIMD** — Runtime-detected SIMD ternary kernels process 128 weights per instruction cycle
+- **BPE Tokenizer** — Byte-Pair Encoding with 2.6x compression ratio for Vietnamese text
+- **11 Crates** — Modular architecture: core engine, language model, math, physics, memory, reasoning, chat, and more
 
 ---
 
@@ -42,26 +25,24 @@ This mirrors how physicists actually develop understanding: observe phenomena, f
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     vagi-runtime                            │
-│                   (OODA loop agent)                          │
+│                   (OODA loop agent)                         │
 ├──────────────┬──────────────┬──────────────┬────────────────┤
 │  vagi-reason │  vagi-world  │  vagi-train  │   vagi-chat    │
 │  (sparse MoE │ (causal DAG  │  (GENESIS    │  (multi-turn   │
-│   + predict  │  + planner)  │   protocol)  │   dialogue +   │
-│   gate)      │              │              │   sampling)    │
+│   routing)   │  + planner)  │   protocol)  │   dialogue)    │
 ├──────────────┼──────────────┼──────────────┼────────────────┤
 │  vagi-memory │  vagi-math   │ vagi-physics │    vagi-lm     │
 │  (streaming  │ (symbolic    │ (Hamiltonian │  (transformer  │
-│   state +    │  algebra +   │  + microworlds│  + AdamW +    │
-│   2-phase    │  calculus)   │  + units)    │   backprop)    │
+│   state +    │  algebra +   │  + microworld│  + BPE + fast  │
+│   2-phase    │  calculus)   │  + units)    │   training)    │
 │   attention) │              │              │                │
 ├──────────────┴──────────────┴──────────────┴────────────────┤
 │              vagi-hdc                                       │
-│    (10,240-bit hypervectors + SQLite                        │
-│     memory + forgetting + parallel query)                   │
+│    (10,240-bit hypervectors + SQLite memory)                │
 ├─────────────────────────────────────────────────────────────┤
 │              vagi-core                                      │
-│  (BitNet, AdaptiveBasis, TernaryMatrix,                     │
-│   SIMD matvec, STE training)                                │
+│  (BitNet, TernaryMatrix, SIMD matvec, STE training,         │
+│   AVX2 ternary kernels, AdaptiveBasis)                      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -69,122 +50,159 @@ This mirrors how physicists actually develop understanding: observe phenomena, f
 
 ## Crates
 
-| Crate | Purpose | Source Files | Tests |
-|-------|---------|:---:|:---:|
-| **[vagi-core](crates/vagi-core)** | BitNet ternary engine (2-bit packed TernaryMatrix, mask-extract SIMD matvec 3×, AdaptiveBasis 3-basis activations, STE training, RMSNorm) | 5 | 61 |
-| **[vagi-hdc](crates/vagi-hdc)** | 10,240-bit binary hypervectors, HDCEncoder (token + embedding), HDCMemory (SQLite, top-K query, forgetting policy, parallel rayon query) | 3 | 31 |
-| **[vagi-math](crates/vagi-math)** | Symbolic algebra: Expr AST, rewrite engine (14+ rules), calculus, equation solver, proof chains, expression embedding, linear algebra | 8 | 38 |
-| **[vagi-physics](crates/vagi-physics)** | SI units + dimensional analysis, Hamiltonian Neural Networks, symmetry discovery (Noether's theorem), symbolic regression, microworlds (Spring, FreeFall, Pendulum) | 5 | 17 |
-| **[vagi-train](crates/vagi-train)** | GENESIS 5-stage training protocol, JEPA embodiment, EWC regularization, curriculum management, Sophia optimizer with STE | 9 | 6 |
-| **[vagi-memory](crates/vagi-memory)** | StreamingState (5-level EMA, O(1)/token, 100K constant memory), TwoPhaseAttention (HDC scout + softmax focus) | 2 | 18 |
-| **[vagi-reason](crates/vagi-reason)** | Energy-based MoE routing (top-K sparse compute, ~95% sparsity), per-expert AdaptiveBasis, PredictiveGate (surprise-driven gating) | 3 | 16 |
-| **[vagi-world](crates/vagi-world)** | Causal graph (petgraph DAG), intervention analysis, topological reasoning, goal-directed planner (A* with heuristic) | 2 | 9 |
-| **[vagi-runtime](crates/vagi-runtime)** | OODA loop agent: Observe (streaming state) → Orient (memory) → Decide (MoE + gate) → Act (output), surprise detection, expert usage tracking | 1 | 9 |
-| **[vagi-lm](crates/vagi-lm)** | Byte-level ternary language model: transformer (STELinear + AdaptiveBasis), RoPE attention, AdamW training with LR scheduling, label smoothing, backpropagation through STE | 8 | 37 |
-| **[vagi-chat](crates/vagi-chat)** | Conversational interface: multi-turn ChatSession, top-k/top-p sampling, repetition penalty, configurable generation (temperature, system prompts) | 4 | 13 |
-| | **Total** | **62** | **258** |
+| Crate | Description |
+|-------|-------------|
+| **vagi-core** | BitNet ternary engine: 2-bit packed TernaryMatrix, mask-extract SIMD matvec, AVX2 ternary kernels, AdaptiveBasis activations, STE training |
+| **vagi-lm** | Transformer language model: RoPE attention, BPE tokenizer, f32 batch-parallel training, AdamW/SignSGD optimizers, checkpoint save/load |
+| **vagi-hdc** | 10,240-bit binary hypervectors, HDCMemory with SQLite persistence, top-K query, forgetting policy |
+| **vagi-math** | Symbolic algebra: Expr AST, rewrite engine, calculus, equation solver, proof chains |
+| **vagi-physics** | SI units, Hamiltonian Neural Networks, symmetry discovery, symbolic regression, microworlds |
+| **vagi-train** | GENESIS 5-stage training protocol, JEPA embodiment, EWC regularization |
+| **vagi-memory** | StreamingState (5-level EMA, O(1)/token), TwoPhaseAttention (HDC scout + softmax) |
+| **vagi-reason** | Energy-based MoE routing, sparse expert compute (~95% sparsity) |
+| **vagi-world** | Causal graph DAG, intervention analysis, A* goal-directed planner |
+| **vagi-runtime** | OODA loop agent: Observe → Orient → Decide → Act |
+| **vagi-chat** | Multi-turn ChatSession, top-k/top-p sampling, repetition penalty |
 
 ---
 
-## Key Components
+## Quick Start
 
-### 1. Real Ternary Engine (`vagi-core`)
+### Prerequisites
 
-Production-grade BitNet implementation:
+- **Rust 1.70+** (`rustup install stable`)
+- **C linker** (for SQLite):
+  - Windows: MinGW-w64 or Visual Studio Build Tools
+  - Linux/macOS: gcc/clang
 
-- **TernaryMatrix**: 2-bit packed storage (32 weights/u64, ~16× smaller than f32)
-- **Mask-extract matvec**: Extract pos/neg bitmasks via bitwise ops, 3× speedup over scalar (3.1ms for 768×3072 release)
-- **AdaptiveBasis**: Learnable activation functions with 3 basis functions (identity + sin + tanh), 84% improvement over fixed activations
-- **STE Training**: Straight-through estimator for ternary weight training (latent f32 → quantize forward → gradient pass-through)
+### Build & Test
 
-### 2. Hyperdimensional Memory (`vagi-hdc`)
+```bash
+git clone https://github.com/baobao1044/vAGI-2.git
+cd vAGI-2
 
-Sub-millisecond episodic memory:
+cargo build --workspace
+cargo test --workspace
+```
 
-- **HyperVector**: 10,240-bit binary vectors, XOR binding, Hamming distance, majority-rule bundling
-- **HDCEncoder**: Token → HyperVector (permute+bundle), Embedding → HyperVector (random projection)
-- **HDCMemory**: In-memory index + SQLite persistence, 10K query in 31ms
-- **ForgettingPolicy**: Exponential decay × access boost × surprise, similarity merging, hard cap
+### Download Vietnamese Training Data
 
-### 3. Mathematical Foundation (`vagi-math`)
+```powershell
+# PowerShell
+powershell -ExecutionPolicy Bypass -File scripts/download_vi_data.ps1
+```
 
-Dual-track reasoning system:
+This downloads Vietnamese sentence data to `data/vi_sentences.txt`.
 
-- **Symbolic track**: Rule-based algebraic rewriting with guaranteed correctness
-- **Neural track**: Heuristic guidance for proof search (via expression embeddings)
+### Train a Model
+
+```bash
+# TINY model (460K params, ~150 sps on CPU)
+cargo run --example train_cpu_beast -p vagi-lm --release -- --epochs 20 --batch 16
+
+# SMALL model (5M params, deeper training)
+cargo run --example train_cpu_beast -p vagi-lm --release -- --small --epochs 20 --batch 8
+
+# BASE model (largest)
+cargo run --example train_cpu_beast -p vagi-lm --release -- --base --epochs 10 --batch 4
+```
+
+Training outputs checkpoints to `data/` directory:
+- `vi_beast_best.bin` — best model by loss
+- `vi_beast_final.bin` — final model
+- `vi_beast_e{N}.bin` — periodic checkpoints
+
+### Alternative Training Pipelines
+
+```bash
+# STE ternary training (quantize-aware)
+cargo run --example train_vietnamese -p vagi-lm --release
+
+# Fine-tuning from checkpoint
+cargo run --example finetune_vietnamese -p vagi-lm --release
+```
+
+### Chat with a Trained Model
+
+```bash
+cargo run --example chat_vi -p vagi-lm --release
+```
+
+---
+
+## Training Pipeline
+
+The **CPU Beast** training pipeline (`train_cpu_beast`) combines three optimizations:
+
+### 1. BPE Tokenizer
+- Byte-Pair Encoding with configurable merge count (default: 1800 merges)
+- 2.6x compression: "thầy giảng bài hay" = 22 tokens vs 58 raw bytes
+- Trained on corpus and persisted to `data/bpe_merges.txt`
+
+### 2. f32 Batch-Parallel Training
+- Direct f32 matrix multiplication (no ternary quantization overhead during training)
+- Rayon-parallelized batch forward passes across CPU cores
+- Exact attention gradient backpropagation through softmax and Q/K/V
+
+### 3. AdamW Optimizer
+- Per-parameter adaptive learning rates
+- Cosine LR schedule with warmup
+- Weight decay regularization
+
+### Performance
+
+| Metric | TINY (d=64) | Notes |
+|--------|-------------|-------|
+| Speed | 150 sps | sequences per second |
+| Model size | 460K params | ~1.8 MB checkpoint |
+| BPE vocab | 2059 | 1800 merges |
+| AVX2 | Auto-detected | 128 weights/cycle |
+
+---
+
+## Core Components
+
+### Ternary Engine (`vagi-core`)
+
+- **TernaryMatrix**: 2-bit packed storage (32 weights per u64, ~16x smaller than f32)
+- **Mask-extract matvec**: AVX2-accelerated, 3x speedup over scalar
+- **AdaptiveBasis**: Learnable activations with 3 basis functions (identity + sin + tanh)
+- **STE Training**: Straight-through estimator for gradient flow through ternary quantization
+
+### Language Model (`vagi-lm`)
 
 ```rust
-use vagi_math::{Expr, MathReasoner};
-use vagi_math::calculus::differentiate;
+use vagi_lm::{VagiLM, LMConfig, batch_train_step};
+use vagi_lm::tokenizer_bpe::BPETokenizer;
 
-// Symbolic derivative: d/dx[x² + sin(x)] = 2x + cos(x)
+// Create model
+let config = LMConfig { vocab_size: 2059, ..LMConfig::tiny() };
+let mut model = VagiLM::new(config);
+
+// BPE tokenization
+let bpe = BPETokenizer::train(&corpus, 1800);
+let tokens = bpe.encode("xin chào thế giới");
+
+// Training step
+let mut adam_m = Vec::new();
+let mut adam_v = Vec::new();
+let (loss, acc) = batch_train_step(&mut model, &batch, &mut adam_m, &mut adam_v, step, lr);
+
+// Generation
+let generated = model.generate_fast(&tokens, 50, 0.8);
+let text = bpe.decode(&generated);
+```
+
+### Symbolic Math (`vagi-math`)
+
+```rust
+use vagi_math::{Expr, calculus::differentiate};
+
 let expr = Expr::var("x").pow(Expr::num(2.0)).add(Expr::var("x").sin());
-let deriv = differentiate(&expr, "x");
+let deriv = differentiate(&expr, "x"); // 2x + cos(x)
 ```
 
-### 4. Physics-Grounded World Model (`vagi-physics`)
-
-- **Hamiltonian Neural Networks**: Energy-conserving dynamics by construction
-- **Symplectic integration**: Leapfrog integrator preserves phase space volume
-- **Dimensional analysis**: Type-checks physical expressions at the unit level
-- **Symbolic regression**: Discovers formulas from data using MDL scoring
-
-### 5. Streaming State Machine (`vagi-memory`)
-
-Multi-scale running state for infinite context:
-
-| Level | Scale | Update Interval | EMA α |
-|-------|-------|:---:|:---:|
-| L0 | Word | Every token | 0.30 |
-| L1 | Sentence | Every 10 tokens | 0.20 |
-| L2 | Paragraph | Every 50 tokens | 0.15 |
-| L3 | Topic | Every 200 tokens | 0.10 |
-| L4 | Episode | Every 1000 tokens | 0.05 |
-
-**O(1) compute per token, constant memory** — verified with 100K tokens.
-
-### 6. Sparse Reasoning Engine (`vagi-reason`)
-
-- **EnergyRouter**: Dot-product energy scores → top-K selection → softmax gating
-- **ExpertPool**: Per-expert AdaptiveBasis activations, ~95% sparsity (1/20 active)
-- **PredictiveGate**: Predicts next state, computes surprise, gates novel vs predicted information
-
-### 7. OODA Runtime Loop (`vagi-runtime`)
-
-```
-Observe → Orient → Decide → Act → (repeat)
-   ↓         ↓        ↓       ↓
- Stream   Memory    MoE +   Output
- State    Query     Gate
-```
-
-End-to-end pipeline wiring all layers. Surprise detection, expert usage tracking, batch processing.
-
-### 8. Language Model (`vagi-lm`)
-
-Byte-level ternary transformer language model with full training infrastructure:
-
-- **Architecture**: Embedding → STELinear Transformer layers (RoPE attention + AdaptiveBasis FFN) → LM head
-- **Training**: AdamW optimizer with per-parameter momentum, LR warmup + cosine decay, label smoothing
-- **Backpropagation**: Full backprop through all layers via STE, using latent f32 weights for gradient flow
-- **Dataset**: `TextDataset` for tokenization, overlapping sequence generation, shuffling
-
-```rust
-use vagi_lm::{VagiLM, LMConfig, LMTrainer, AdvancedConfig};
-
-let mut model = VagiLM::new(LMConfig::tiny());
-let mut trainer = LMTrainer::new(&model, AdvancedConfig::default());
-let metrics = trainer.train_step(&mut model, &tokens);
-// metrics.loss=0.88, metrics.accuracy=100%, metrics.perplexity=2.42
-```
-
-### 9. Chat Interface (`vagi-chat`)
-
-Multi-turn conversational interface with advanced sampling:
-
-- **ChatSession**: Dialogue history, context building, system prompts
-- **Sampling**: Top-K, Top-P (nucleus), repetition penalty, temperature control
-- **Presets**: `greedy()`, `creative()`, `default()`
+### Chat Interface (`vagi-chat`)
 
 ```rust
 use vagi_chat::{ChatSession, ChatConfig};
@@ -193,130 +211,65 @@ let mut session = ChatSession::new(model, ChatConfig::default());
 let response = session.send("Hello!");
 ```
 
-### 10. GENESIS Training Protocol (`vagi-train`)
-
-| Stage | Name | What happens |
-|-------|------|-------------|
-| 1 | **Embody** | JEPA-style self-supervised learning on microworld trajectories |
-| 2 | **Abstract** | Discover conserved quantities and symmetries (Noether's theorem) |
-| 3 | **Formalize** | Neural-guided theorem proving with difficulty scaling |
-| 4 | **Compose** | Solve problems requiring multiple concepts |
-| 5 | **Consolidate** | Sleep phase: prune, compress (MDL), replay dreams |
-
-### 11. Causal World Model (`vagi-world`)
-
-- **CausalGraph**: petgraph-backed DAG with labeled nodes and weighted edges
-- **Intervention**: Set a node's value, propagate downstream via causal structure
-- **Planner**: A* goal-directed planning over causal graph with heuristic distance
-
 ---
 
-## Getting Started
+## Project Structure
 
-### Prerequisites
-
-- Rust 1.70+ (`rustup install stable`)
-- A C linker (needed for SQLite bundled compilation):
-  - **Windows**: MinGW-w64 or Visual Studio Build Tools
-  - **Linux/macOS**: gcc/clang (usually pre-installed)
-
-### Build & Test
-
-```bash
-# Clone
-git clone https://github.com/baobao1044/vAGI-2.git
-cd vAGI-2
-
-# Build all crates
-cargo build --workspace
-
-# Run all 258 tests
-cargo test --workspace
-
-# Run language model training tests
-cargo test -p vagi-lm -- --nocapture training
-
-# Run the vertical slice demo (shows training output)
-cargo test -p vagi-train --test vertical_slice -- --nocapture
-
-# Lint (same as CI)
-cargo clippy --workspace -- -D warnings
 ```
-
----
-
-## Performance Benchmarks
-
-| Benchmark | Result |
-|-----------|--------|
-| TernaryMatrix 768×3072 matvec (release) | **3.1ms** (scalar: 5.7ms) |
-| Mask-extract speedup (debug) | **3.07×** |
-| Mask-extract speedup (release) | **1.84×** |
-| HDC 10K query_topk(32) | **31ms** |
-| StreamingState 100K tokens | **constant memory** |
-| MoE sparsity (top-1/20) | **95%** |
-| LM AdamW training (200 steps, "ABCABC") | **98.1% loss reduction, 100% accuracy** |
-| LM SGD training (200 steps) | **98.9% loss reduction** |
-| LM multi-pattern learning (4 patterns) | **78.8% loss reduction** |
-
----
-
-## Project Status
-
-| Component | Status | Tests |
-|-----------|--------|:---:|
-| Ternary engine (packed, SIMD, STE) | ✅ Complete | 61 |
-| AdaptiveBasis (3-basis, warmup) | ✅ Complete | — |
-| Hyperdimensional Computing (full) | ✅ Complete | 31 |
-| Math engine (Expr, rewrite, calculus) | ✅ Complete | 38 |
-| Physics (units, HNN, microworlds) | ✅ Complete | 17 |
-| GENESIS training protocol | ✅ Framework | 6 |
-| Streaming state (5-level EMA) | ✅ Complete | 9 |
-| Two-phase attention (HDC scout) | ✅ Complete | 9 |
-| Sparse MoE reasoning | ✅ Complete | 16 |
-| Predictive coding gate | ✅ Complete | — |
-| Causal world model | ✅ Complete | 6 |
-| Goal-directed planner | ✅ Complete | 3 |
-| OODA runtime loop | ✅ Complete | 9 |
-| Language model (transformer + train) | ✅ Complete | 37 |
-| Chat interface (sampling + session) | ✅ Complete | 13 |
-| Vertical slice MVP | ✅ Complete | 1 |
-| Tier 2+ microworlds | 🔲 Planned | — |
-| Python bindings (PyO3) | 🔲 Planned | — |
-
----
-
-## Roadmap
-
-See [plan.md](plan.md) for the full project roadmap and architectural specification.
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture documentation.
-
-See [docs/RESEARCH.md](docs/RESEARCH.md) for research foundations and references.
+vAGI-2/
+├── crates/
+│   ├── vagi-core/          # Ternary engine + SIMD
+│   ├── vagi-lm/            # Language model + training
+│   │   ├── src/
+│   │   │   ├── model.rs        # VagiLM transformer
+│   │   │   ├── fast_train.rs   # f32 batch-parallel training
+│   │   │   ├── tokenizer_bpe.rs# BPE tokenizer
+│   │   │   ├── sign_sgd.rs     # SignSGD optimizer
+│   │   │   └── checkpoint.rs   # Model save/load
+│   │   └── examples/
+│   │       ├── train_cpu_beast.rs    # Main training binary
+│   │       ├── train_vietnamese.rs   # STE training
+│   │       ├── finetune_vietnamese.rs# Fine-tuning
+│   │       ├── chat_vi.rs           # Interactive chat
+│   │       ├── eval_vietnamese.rs   # Model evaluation
+│   │       └── convert_model.rs     # Model conversion
+│   ├── vagi-hdc/           # Hyperdimensional computing
+│   ├── vagi-math/          # Symbolic algebra + calculus
+│   ├── vagi-physics/       # Physics simulation
+│   ├── vagi-train/         # GENESIS protocol
+│   ├── vagi-memory/        # Streaming state
+│   ├── vagi-reason/        # Sparse MoE reasoning
+│   ├── vagi-world/         # Causal world model
+│   ├── vagi-runtime/       # OODA loop agent
+│   └── vagi-chat/          # Chat interface
+├── scripts/
+│   ├── download_vi_data.ps1    # Download Vietnamese data
+│   └── download_vi_large.ps1   # Download larger dataset
+├── data/                   # Training data & checkpoints (gitignored)
+├── docs/
+│   ├── ARCHITECTURE.md
+│   └── RESEARCH.md
+└── experiments/
+    └── ternary-hnn/        # Hamiltonian Neural Network experiments
+```
 
 ---
 
 ## Design Principles
 
-1. **CPU-First** — No GPU required. All operations designed for commodity hardware
-2. **Ternary Weights** — Strict {-1, 0, +1}. Multiplications become additions
-3. **Correct by Construction** — Hamiltonian dynamics conserve energy structurally; symbolic proofs guarantee algebraic correctness
-4. **No `unsafe`** — Safe Rust throughout, except where justified with documented invariants
-5. **Incremental** — Each crate builds and tests independently
-6. **MDL Compression** — Occam's razor at every level: simpler models preferred unless data demands complexity
-7. **Sparse Compute** — Only ~5% of experts active per input, O(1) memory retrieval
+1. **CPU-First** — No GPU required. Ternary weights turn multiplications into additions
+2. **Ternary Weights** — Strict {-1, 0, +1}. 2-bit packed storage, 16x memory reduction
+3. **Correct by Construction** — Hamiltonian dynamics conserve energy; symbolic proofs guarantee algebraic correctness
+4. **Safe Rust** — No `unsafe` except where justified with documented invariants
+5. **Modular** — Each crate builds and tests independently
+6. **Sparse Compute** — ~5% of experts active per input, O(1) memory retrieval
 
 ---
 
-## Contributing
+## Documentation
 
-This is a research project. Contributions welcome in:
-
-- Additional rewrite rules (target: 100+ rules across all categories)
-- New microworlds (Tier 2-5: projectile, orbit, N-body, fluids)
-- MCTS-based symbolic regression improvements
-- Benchmark comparisons with standard ML baselines
-- Documentation and examples
+- [Architecture Guide](docs/ARCHITECTURE.md) — Detailed system architecture
+- [Research Foundations](docs/RESEARCH.md) — Academic references and theoretical basis
 
 ---
 

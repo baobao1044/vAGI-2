@@ -1042,6 +1042,7 @@ dependencies = [
  "criterion",
  "proptest",
  "rand 0.8.5",
+ "rayon",
  "safetensors",
  "serde",
  "thiserror",
@@ -1069,6 +1070,7 @@ name = "vagi-lm"
 version = "0.1.0"
 dependencies = [
  "rand 0.8.5",
+ "rayon",
  "vagi-core",
 ]
 

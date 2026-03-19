@@ -7,5 +7,15 @@ description = "Ternary language model — byte-level tokenizer, transformer, aut
 [dependencies]
 vagi-core = { path = "../vagi-core" }
 rand = { workspace = true }
+rayon = { workspace = true }
 
 [dev-dependencies]
+
+[[example]]
+name = "train_vietnamese"
+
+[[example]]
+name = "finetune_vietnamese"
+
+[[example]]
+name = "train_cpu_beast"

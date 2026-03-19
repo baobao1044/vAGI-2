@@ -666,6 +666,7 @@ fn rope_backward(
 // ── LMTrainer: Advanced training with AdamW ─────────────────────
 
 /// Advanced training configuration.
+#[derive(Clone)]
 pub struct AdvancedConfig {
     /// Peak learning rate.
     pub lr: f32,
@@ -741,14 +742,14 @@ pub struct TrainMetrics {
 /// warmup and label smoothing for better generalization.
 pub struct LMTrainer {
     /// First moment estimates (m), flattened across all params.
-    adam_m: Vec<f32>,
+    pub(crate) adam_m: Vec<f32>,
     /// Second moment estimates (v), flattened across all params.
-    adam_v: Vec<f32>,
+    pub(crate) adam_v: Vec<f32>,
     /// Offsets into adam_m/adam_v for each parameter group.
     /// [embedding, layer0_wq, layer0_wk, ..., lm_head]
     param_offsets: Vec<usize>,
     /// Current step count.
-    step: usize,
+    pub(crate) step: usize,
     /// Configuration.
     config: AdvancedConfig,
 }
