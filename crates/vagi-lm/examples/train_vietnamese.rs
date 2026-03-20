@@ -200,7 +200,7 @@ fn train_curriculum(
                 epoch_loss += m.loss;
                 epoch_acc += m.accuracy;
                 count += 1;
-                global_step += 1;
+                _global_step += 1;
 
                 if (i + 1) % 500 == 0 || i + 1 == n {
                     let avg_loss = epoch_loss / count as f32;

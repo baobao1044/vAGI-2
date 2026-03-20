@@ -20,6 +20,12 @@ jobs:
       - name: Check
         run: cargo check --workspace
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --workspace -- --nocapture 2>&1 | tee test_output.txt
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: test_output.txt
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings -A clippy::should_implement_trait -A clippy::needless_range_loop -A clippy::type_complexity
