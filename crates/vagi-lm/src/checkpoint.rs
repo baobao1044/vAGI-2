@@ -13,6 +13,7 @@ use std::io::Write;
 use crate::config::LMConfig;
 use crate::model::VagiLM;
 use crate::training::{LMTrainer, AdvancedConfig};
+use vagi_core::adaptive::{AdaptiveBasis, BasisConfig, N_BASIS};
 
 /// Checkpoint header (serialized as JSON).
 struct CheckpointHeader {
@@ -63,6 +64,10 @@ impl CheckpointHeader {
 }
 
 /// Collect all model weights into a flat f32 vector.
+///
+/// The original layout ended at `lm_head`. Newer checkpoints append
+/// normalization and activation state after that prefix so older files
+/// still deserialize correctly.
 fn collect_weights(model: &VagiLM) -> Vec<f32> {
     let mut w = Vec::new();
     w.extend_from_slice(&model.embedding.weight);
@@ -75,7 +80,36 @@ fn collect_weights(model: &VagiLM) -> Vec<f32> {
         w.extend_from_slice(&layer.ffn_down.w_latent);
     }
     w.extend_from_slice(&model.lm_head.w_latent);
+
+    // Appended state for full round-trip fidelity.
+    w.extend_from_slice(&model.final_norm.weight);
+    for layer in &model.layers {
+        w.extend_from_slice(&layer.attn_norm.weight);
+        w.extend_from_slice(&layer.ffn_norm.weight);
+        w.extend_from_slice(layer.activation.weights_slice());
+    }
     w
+}
+
+fn take_slice<'a>(src: &'a [f32], offset: &mut usize, len: usize) -> Option<&'a [f32]> {
+    let end = offset.checked_add(len)?;
+    if end > src.len() {
+        return None;
+    }
+    let slice = &src[*offset..end];
+    *offset = end;
+    Some(slice)
+}
+
+fn restore_activation(layer: &mut crate::transformer::TransformerLayer, weights: &[f32]) {
+    layer.activation = match weights.len() {
+        3 => AdaptiveBasis::with_config_weights(BasisConfig::trimmed(), weights.to_vec()),
+        N_BASIS => {
+            let arr: [f32; N_BASIS] = weights.try_into().expect("validated activation width");
+            AdaptiveBasis::with_weights(arr)
+        }
+        _ => layer.activation.clone(),
+    };
 }
 
 /// Restore weights from a flat f32 vector back into the model.
@@ -109,6 +143,32 @@ fn restore_weights(model: &mut VagiLM, w: &[f32]) {
 
     let n = model.lm_head.w_latent.len();
     model.lm_head.w_latent.copy_from_slice(&w[offset..offset + n]);
+    offset += n;
+
+    // Optional appended state for backward compatibility with older checkpoints.
+    if let Some(slice) = take_slice(w, &mut offset, model.final_norm.weight.len()) {
+        model.final_norm.weight.copy_from_slice(slice);
+    } else {
+        return;
+    }
+
+    for layer in &mut model.layers {
+        if let Some(slice) = take_slice(w, &mut offset, layer.attn_norm.weight.len()) {
+            layer.attn_norm.weight.copy_from_slice(slice);
+        } else {
+            return;
+        }
+        if let Some(slice) = take_slice(w, &mut offset, layer.ffn_norm.weight.len()) {
+            layer.ffn_norm.weight.copy_from_slice(slice);
+        } else {
+            return;
+        }
+        if let Some(slice) = take_slice(w, &mut offset, layer.activation.n_basis()) {
+            restore_activation(layer, slice);
+        } else {
+            return;
+        }
+    }
 }
 
 fn f32_to_bytes(data: &[f32]) -> &[u8] {
@@ -233,7 +293,7 @@ pub fn load_checkpoint(
 
     let mut trainer = LMTrainer::new(&model, train_cfg);
     if let (Some(m), Some(v)) = (adam_m, adam_v) {
-        if m.len() == trainer.adam_m.len() {
+        if m.len() == trainer.adam_m.len() && v.len() == trainer.adam_v.len() {
             trainer.adam_m.copy_from_slice(&m);
             trainer.adam_v.copy_from_slice(&v);
             trainer.step = header.step;
@@ -293,14 +353,22 @@ mod tests {
     #[test]
     fn test_save_load_model() {
         let config = LMConfig::tiny();
-        let model = VagiLM::new(config);
+        let mut model = VagiLM::new(config);
+        model.final_norm.weight[0] = 1.5;
+        model.layers[0].attn_norm.weight[0] = 0.8;
+        model.layers[0].ffn_norm.weight[0] = 1.2;
+        model.layers[0].activation = AdaptiveBasis::with_config_weights(
+            BasisConfig::trimmed(),
+            vec![0.6, 0.1, 0.3],
+        );
+
         let path = std::env::temp_dir().join("vagi_test_model.ckpt");
         let path = path.to_str().unwrap();
         save_model(&model, path).unwrap();
         let loaded = load_model(path).unwrap();
         assert_eq!(loaded.config.d_model, model.config.d_model);
         assert_eq!(loaded.config.n_layers, model.config.n_layers);
-        // Check weights match
+
         let w1 = collect_weights(&model);
         let w2 = collect_weights(&loaded);
         assert_eq!(w1.len(), w2.len());
@@ -316,7 +384,6 @@ mod tests {
         let model = VagiLM::new(config);
         let adv = AdvancedConfig::default();
         let mut trainer = LMTrainer::new(&model, adv.clone());
-        // Simulate some steps
         trainer.step = 42;
         trainer.adam_m[0] = 1.23;
         trainer.adam_v[0] = 4.56;
