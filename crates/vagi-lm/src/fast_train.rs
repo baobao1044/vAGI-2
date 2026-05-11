@@ -526,6 +526,7 @@ fn clip_grad(grad: &mut [f32], max_norm: f32) {
 }
 
 /// Apply accumulated gradients to model with AdamW.
+#[allow(clippy::too_many_arguments)]
 pub fn apply_gradients(
     model: &mut VagiLM,
     grads: &GradBuffer,
