@@ -394,9 +394,7 @@ fn forward_layer_cached(
             }
 
             let aw_base = head * seq_len * seq_len + qi * seq_len;
-            for i in 0..=qi {
-                attn_weights[aw_base + i] = exps[i];
-            }
+            attn_weights[aw_base..(qi + aw_base + 1)].copy_from_slice(&exps[..(qi + 1)]);
 
             let out_offset = qi * d + head * h_dim;
             for vi in 0..=qi {
@@ -713,91 +711,7 @@ impl AdvancedConfig {
         } else if self.total_steps > self.warmup_steps {
             // Cosine decay to 10% of peak
             let decay_steps = self.total_steps - self.warmup_steps;
-            let progress = (step - self.warmup_steps) as f32 / decay_steps as f32;
-            let min_lr = self.lr * 0.1;
-            min_lr + 0.5 * (self.lr - min_lr) * (1.0 + (std::f32::consts::PI * progress).cos())
-        } else {
-            self.lr
-        }
-    }
-}
-
-/// Training metrics for a single step.
-#[derive(Clone, Debug)]
-pub struct TrainMetrics {
-    /// Cross-entropy loss.
-    pub loss: f32,
-    /// Perplexity (exp(loss)).
-    pub perplexity: f32,
-    /// Token prediction accuracy (top-1).
-    pub accuracy: f32,
-    /// Effective learning rate at this step.
-    pub lr: f32,
-}
-
-/// Advanced language model trainer with AdamW optimizer.
-///
-/// Maintains per-parameter optimizer state (first/second moment estimates)
-/// for all learnable weights in the model. Uses cosine LR scheduling with
-/// warmup and label smoothing for better generalization.
-pub struct LMTrainer {
-    /// First moment estimates (m), flattened across all params.
-    pub(crate) adam_m: Vec<f32>,
-    /// Second moment estimates (v), flattened across all params.
-    pub(crate) adam_v: Vec<f32>,
-    /// Offsets into adam_m/adam_v for each parameter group.
-    /// [embedding, layer0_wq, layer0_wk, ..., lm_head]
-    param_offsets: Vec<usize>,
-    /// Current step count.
-    pub(crate) step: usize,
-    /// Configuration.
-    config: AdvancedConfig,
-}
-
-impl LMTrainer {
-    /// Create a new trainer for the given model.
-    pub fn new(model: &VagiLM, config: AdvancedConfig) -> Self {
-        let mut offsets = Vec::new();
-        let mut total_params = 0usize;
-
-        // Embedding
-        offsets.push(total_params);
-        total_params += model.embedding.weight.len();
-
-        // Each transformer layer: wq, wk, wv, wo, ffn_up, ffn_down
-        for layer in &model.layers {
-            offsets.push(total_params);
-            total_params += layer.attention.wq.w_latent.len();
-            offsets.push(total_params);
-            total_params += layer.attention.wk.w_latent.len();
-            offsets.push(total_params);
-            total_params += layer.attention.wv.w_latent.len();
-            offsets.push(total_params);
-            total_params += layer.attention.wo.w_latent.len();
-            offsets.push(total_params);
-            total_params += layer.ffn_up.w_latent.len();
-            offsets.push(total_params);
-            total_params += layer.ffn_down.w_latent.len();
-        }
-
-        // LM head
-        offsets.push(total_params);
-        total_params += model.lm_head.w_latent.len();
-
-        Self {
-            adam_m: vec![0.0; total_params],
-            adam_v: vec![0.0; total_params],
-            param_offsets: offsets,
-            step: 0,
-            config,
-        }
-    }
-
-    /// Get current step count.
-    pub fn step_count(&self) -> usize { self.step }
-
-    /// Get current effective learning rate.
-    pub fn current_lr(&self) -> f32 { self.config.lr_at_step(self.step) }
+        …742 tokens truncated…step(self.step) }
 
     /// One training step with AdamW. Returns metrics.
     pub fn train_step(&mut self, model: &mut VagiLM, tokens: &[u32]) -> TrainMetrics {
