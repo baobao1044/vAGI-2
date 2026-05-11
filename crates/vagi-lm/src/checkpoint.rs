@@ -45,7 +45,7 @@ impl CheckpointHeader {
             let pat = format!("\"{}\":", key);
             let start = s.find(&pat)? + pat.len();
             let rest = &s[start..];
-            let end = rest.find(|c: char| c == ',' || c == '}').unwrap_or(rest.len());
+            let end = rest.find([',', '}']).unwrap_or(rest.len());
             Some(rest[..end].trim())
         };
         Some(Self {
@@ -178,7 +178,7 @@ fn f32_to_bytes(data: &[f32]) -> &[u8] {
 }
 
 fn bytes_to_f32(data: &[u8]) -> Vec<f32> {
-    assert!(data.len() % 4 == 0);
+    assert!(data.len().is_multiple_of(4));
     let n = data.len() / 4;
     let mut out = vec![0.0f32; n];
     unsafe {
