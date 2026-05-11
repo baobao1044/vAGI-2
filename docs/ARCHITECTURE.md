@@ -30,19 +30,23 @@ vagi-world
     └── petgraph
 ```
 
+## Scope Note
+
+This document describes how the repository is currently structured. It is an implementation guide for the codebase, not a claim that every module has been broadly validated or benchmarked in production settings.
+
 ## Layer Architecture
 
 ### Layer 0: Ternary Compute (`vagi-core`)
 
-The foundation layer provides efficient ternary {-1, 0, +1} neural network primitives.
+The foundation layer provides ternary {-1, 0, +1} neural-network primitives.
 
 **Key types:**
 
 | Type | Description |
 |------|-------------|
 | `TernaryMatrix` | 2-bit packed storage (32 weights per u64). `pack()` from f32 via absmax thresholding, `from_ternary()` from i8 |
-| `ternary_matvec()` | Runtime dispatch: `ternary_matvec_fast()` (mask-extract, 3× debug / 1.8× release speedup) → fallback to scalar |
-| `BitNetLinear` | Full ternary linear layer: TernaryMatrix + per-row scale + RMSNorm |
+| `ternary_matvec()` | Runtime dispatch: optimized path when available, otherwise scalar fallback |
+| `BitNetLinear` | Ternary linear layer: TernaryMatrix + per-row scale + RMSNorm |
 | `AdaptiveBasis` | Learnable activation: `Σ weight_i × basis_i(x)` with identity, sin, tanh |
 | `AdaptiveBlock` | BitNetLinear → AdaptiveBasis pipeline |
 | `STEQuantizer` | Straight-through estimator: quantize forward, gradient pass-through |
@@ -68,7 +72,7 @@ For each packed u64 containing 32 ternary weights:
 
 ### Layer 1: Hyperdimensional Computing (`vagi-hdc`)
 
-Binary hypervector engine for sub-millisecond memory retrieval.
+Binary hypervector components for associative-memory experiments.
 
 **HyperVector (10,240 bits = 160 × u64):**
 - `bind(a, b)` → XOR (associative, commutative, self-inverse)
@@ -116,7 +120,7 @@ Phase 1 (Scout): Query → HDCEncoder → HyperVector → XOR scan → top-K epi
 Phase 2 (Focus): Query × raw_buffer^T / √d → softmax → weighted sum
 ```
 
-Ring buffer caps recent tokens (default 256). HDC memory stores all.
+Ring buffer caps recent tokens (default 256). HDC memory stores longer-lived episode vectors.
 
 ### Layer 3: Reasoning (`vagi-reason`)
 
@@ -167,7 +171,7 @@ CycleMetrics: `{surprise, gate_value, aux_loss, cycle_count}`
 
 ### Layer 6: Language Model (`vagi-lm`)
 
-Byte-level ternary transformer for text generation and training.
+Transformer language-model crate for text experiments.
 
 **Architecture:**
 - `ByteTokenizer`: UTF-8 byte-level tokenization (vocab=259: 256 bytes + BOS/EOS/PAD)
@@ -180,7 +184,7 @@ Byte-level ternary transformer for text generation and training.
 - LR warmup (linear) + cosine decay schedule
 - Label smoothing (distributes probability mass across vocab)
 - Gradient clipping (max-norm)
-- Backpropagation through all layers using latent f32 weights (not quantized ternary)
+- Backpropagation through latent f32 weights in the current training path
 - Per-step metrics: loss, perplexity, token accuracy, effective LR
 
 **Key types:**
@@ -196,7 +200,7 @@ Byte-level ternary transformer for text generation and training.
 
 ### Layer 7: Chat Interface (`vagi-chat`)
 
-Multi-turn dialogue system built on `vagi-lm`.
+Multi-turn dialogue utilities built on `vagi-lm`.
 
 **ChatSession:**
 - History tracking with `Role` (System/User/Assistant)
@@ -242,15 +246,15 @@ Final Output + CycleMetrics
 
 | Crate | Tests | Key validations |
 |---|:---:|---|
-| vagi-core | 61 | Ternary packing roundtrip, matvec bit-exact, SIMD correctness, AdaptiveBasis convergence |
-| vagi-hdc | 31 | XOR self-inverse, bundle majority, persistence roundtrip, 10K query <50ms, forgetting |
+| vagi-core | 61 | Ternary packing roundtrip, matvec correctness, optimized path checks, AdaptiveBasis convergence |
+| vagi-hdc | 31 | XOR self-inverse, bundle majority, persistence roundtrip, forgetting |
 | vagi-math | 38 | Rewrite rules, calculus derivatives, equation solving, proof chains |
-| vagi-physics | 17 | Unit algebra, energy conservation, symmetry detection, microworld trajectories |
-| vagi-memory | 18 | EMA convergence, constant memory 100K tokens, attention output shape, ring buffer |
+| vagi-physics | 17 | Unit algebra, energy-conservation checks, symmetry detection, microworld trajectories |
+| vagi-memory | 18 | EMA convergence, constant-memory token processing, attention output shape, ring buffer |
 | vagi-reason | 16 | Routing correctness, load balancing, sparsity, surprise detection, gate passthrough |
 | vagi-world | 9 | DAG validation, topological order, intervention propagation, planning |
 | vagi-runtime | 9 | OODA cycle, batch run, surprise detection, expert usage tracking |
 | vagi-train | 6+1 | GENESIS stages, vertical slice end-to-end |
-| vagi-lm | 37 | AdamW vs SGD benchmark, RMSNorm gradient check, multi-pattern learning, accuracy convergence |
+| vagi-lm | 37 | Trainer behavior, RMSNorm gradient checks, multi-pattern learning |
 | vagi-chat | 13 | Session management, sampling strategies, history tracking, config presets |
 | **Total** | **258** | |
