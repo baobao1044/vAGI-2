@@ -20,6 +20,7 @@ this repo should be treated as local measurements rather than universal expectat
 
 For a short maturity summary, see [docs/STATUS.md](docs/STATUS.md).
 For benchmark framing and reproduction notes, see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+For common questions, see [docs/FAQ.md](docs/FAQ.md).
 For contribution expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
@@ -288,6 +289,7 @@ vAGI-2/
 - [Research Notes](docs/RESEARCH.md) — References and implementation notes
 - [Project Status](docs/STATUS.md) — Current maturity and scope notes
 - [Benchmark Notes](docs/BENCHMARKS.md) — How to interpret and reproduce reported numbers
+- [FAQ](docs/FAQ.md) — Short answers to common scope and trust questions
 - [Contributing Guide](CONTRIBUTING.md) — Expectations for scoped, verifiable changes
 
 ---
