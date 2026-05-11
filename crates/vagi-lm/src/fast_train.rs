@@ -7,7 +7,6 @@
 //!
 //! After f32 pre-training, run standard STE training for ternary fine-tuning.
 
-use rayon::prelude::*;
 use crate::{VagiLM, LMConfig};
 use crate::training::{AdvancedConfig, LMTrainer};
 
