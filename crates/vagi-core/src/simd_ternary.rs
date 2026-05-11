@@ -24,7 +24,11 @@ pub fn has_avx2() -> bool {
 /// For each row, extracts positive and negative masks from packed ternary data,
 /// then uses AVX2 to add/subtract 8 floats at a time.
 ///
-/// Safety: requires AVX2 support (checked at runtime by caller).
+/// # Safety
+///
+/// The caller must ensure AVX2 is available on the current CPU before calling
+/// this function. The input and output buffers must also match the matrix
+/// dimensions expected by `w`.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
 pub unsafe fn ternary_matvec_avx2(w: &TernaryMatrix, x: &[f32], y: &mut [f32]) {
@@ -32,7 +36,7 @@ pub unsafe fn ternary_matvec_avx2(w: &TernaryMatrix, x: &[f32], y: &mut [f32]) {
     let cols = w.cols();
     let data = w.raw_data();
     let scale = w.scale();
-    let cols_padded = ((cols + 31) / 32) * 32;
+    let cols_padded = cols.div_ceil(32) * 32;
     let u64s_per_row = cols_padded / 32;
 
     for m in 0..rows {
@@ -114,6 +118,12 @@ pub unsafe fn ternary_matvec_avx2(w: &TernaryMatrix, x: &[f32], y: &mut [f32]) {
 
 /// Simpler AVX2 approach: chunk-based processing.
 /// Processes 8 consecutive x values at a time, checking ternary weights.
+///
+/// # Safety
+///
+/// The caller must ensure AVX2 is available on the current CPU before calling
+/// this function. The input and output buffers must also match the matrix
+/// dimensions expected by `w`.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
 pub unsafe fn ternary_matvec_avx2_chunked(w: &TernaryMatrix, x: &[f32], y: &mut [f32]) {
@@ -121,7 +131,7 @@ pub unsafe fn ternary_matvec_avx2_chunked(w: &TernaryMatrix, x: &[f32], y: &mut 
     let cols = w.cols();
     let data = w.raw_data();
     let scale = w.scale();
-    let cols_padded = ((cols + 31) / 32) * 32;
+    let cols_padded = cols.div_ceil(32) * 32;
     let u64s_per_row = cols_padded / 32;
 
     for m in 0..rows {
@@ -259,7 +269,7 @@ pub fn ternary_matvec_simd_parallel(w: &TernaryMatrix, x: &[f32], y: &mut [f32])
     let cols = w.cols();
     let data = w.raw_data();
     let scale = w.scale();
-    let cols_padded = ((cols + 31) / 32) * 32;
+    let cols_padded = cols.div_ceil(32) * 32;
     let u64s_per_row = cols_padded / 32;
 
     y[..rows].par_iter_mut().enumerate().for_each(|(m, y_m)| {
