@@ -18,6 +18,10 @@ CPU-oriented training paths, symbolic and physics-inspired modules, memory syste
 agent-style runtime loops. Some crates are more mature than others, and benchmark numbers in
 this repo should be treated as local measurements rather than universal expectations.
 
+For a short maturity summary, see [docs/STATUS.md](docs/STATUS.md).
+For benchmark framing and reproduction notes, see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+For contribution expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ---
 
 ## Highlights
@@ -282,6 +286,9 @@ vAGI-2/
 
 - [Architecture Guide](docs/ARCHITECTURE.md) — Detailed system architecture
 - [Research Notes](docs/RESEARCH.md) — References and implementation notes
+- [Project Status](docs/STATUS.md) — Current maturity and scope notes
+- [Benchmark Notes](docs/BENCHMARKS.md) — How to interpret and reproduce reported numbers
+- [Contributing Guide](CONTRIBUTING.md) — Expectations for scoped, verifiable changes
 
 ---
 
