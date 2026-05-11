@@ -2,13 +2,14 @@
 //!
 //! Key optimizations:
 //! - Direct f32 matmul (skips ternary pack/unpack — saves ~40% compute)
-//! - Batch-parallel: forward N sequences on N threads via rayon
-//! - Gradient accumulation: merge gradients from batch, update once
+//! - Gradient accumulation helpers for compatibility with older callers
+//! - Shared trainer path for correctness-critical model updates
 //!
 //! After f32 pre-training, run standard STE training for ternary fine-tuning.
 
 use rayon::prelude::*;
 use crate::{VagiLM, LMConfig};
+use crate::training::{AdvancedConfig, LMTrainer};
 
 /// Fast f32 matrix-vector multiply: y = W × x
 /// W is [out_features × in_features], stored row-major.
@@ -129,12 +130,18 @@ impl GradBuffer {
 /// Compute forward pass + gradients using direct f32 matmul.
 /// Returns (loss, accuracy, gradient_buffer).
 ///
-/// This is the core function: NO ternary quantization overhead.
+/// This helper is kept for compatibility with existing callers. It now
+/// guards short sequences explicitly to avoid underflow/panics.
 pub fn f32_forward_backward(
     model: &VagiLM,
     tokens: &[u32],
 ) -> (f32, f32, GradBuffer) {
     let config = &model.config;
+    let mut grads = GradBuffer::zeros(config);
+    if tokens.len() < 2 {
+        return (0.0, 0.0, grads);
+    }
+
     let d = config.d_model;
     let v = config.vocab_size;
     let n_heads = config.n_heads;
@@ -144,7 +151,6 @@ pub fn f32_forward_backward(
     let input = &tokens[..seq_len];
     let targets = &tokens[1..];
 
-    let mut grads = GradBuffer::zeros(config);
     grads.count = 1;
 
     // ━━━ FORWARD ━━━
@@ -252,7 +258,7 @@ pub fn f32_forward_backward(
             f32_matvec(&layer.ffn_up.w_latent, &ffn_norm[t*d..(t+1)*d],
                        &mut ffn_up[t*ffn_dim..(t+1)*ffn_dim], ffn_dim, d);
         }
-        // SiLU activation
+        // SiLU activation (legacy compatibility path)
         for v in ffn_up.iter_mut() {
             *v = *v * (1.0 / (1.0 + (-*v).exp()));
         }
@@ -570,12 +576,11 @@ pub fn apply_gradients(
     adamw(&mut model.lm_head.w_latent, &grads.lm_head);
 }
 
-/// Batch-parallel training step.
+/// Batch training step.
 ///
-/// Forwards N sequences in parallel using rayon,
-/// accumulates gradients, applies single AdamW update.
-///
-/// Returns (avg_loss, avg_accuracy).
+/// This path now delegates the actual updates to the shared `LMTrainer`
+/// implementation so the training-time architecture matches the runtime model.
+/// Short sequences are ignored instead of causing underflow.
 pub fn batch_train_step(
     model: &mut VagiLM,
     batch: &[&[u32]],
@@ -584,30 +589,35 @@ pub fn batch_train_step(
     step: usize,
     lr: f32,
 ) -> (f32, f32) {
-    if batch.is_empty() { return (0.0, 0.0); }
-
-    // Forward all sequences in parallel — model is read-only here
-    let results: Vec<(f32, f32, GradBuffer)> = batch.par_iter()
-        .map(|tokens| f32_forward_backward(model, tokens))
-        .collect();
-
-    // Accumulate gradients
-    let mut total_grads = GradBuffer::zeros(&model.config);
-    let mut total_loss = 0.0f32;
-    let mut total_acc = 0.0f32;
-
-    for (loss, acc, grad) in &results {
-        total_loss += loss;
-        total_acc += acc;
-        total_grads.accumulate(grad);
+    let valid_batch: Vec<&[u32]> = batch.iter().copied().filter(|tokens| tokens.len() >= 2).collect();
+    if valid_batch.is_empty() {
+        return (0.0, 0.0);
     }
 
-    total_grads.average();
-    let n = batch.len() as f32;
+    let cfg = AdvancedConfig {
+        lr,
+        ..AdvancedConfig::default()
+    };
+    let mut trainer = LMTrainer::new(model, cfg);
+    if adam_m.len() == trainer.adam_m.len() && adam_v.len() == trainer.adam_v.len() {
+        trainer.adam_m.copy_from_slice(adam_m);
+        trainer.adam_v.copy_from_slice(adam_v);
+    }
+    trainer.step = step;
 
-    // Apply gradients
-    apply_gradients(model, &total_grads, adam_m, adam_v, step, lr,
-                    0.9, 0.999, 1e-8, 0.01);
+    let mut total_loss = 0.0f32;
+    let mut total_acc = 0.0f32;
+    for tokens in valid_batch.iter().copied() {
+        let metrics = trainer.train_step(model, tokens);
+        total_loss += metrics.loss;
+        total_acc += metrics.accuracy;
+    }
 
+    adam_m.clear();
+    adam_m.extend_from_slice(&trainer.adam_m);
+    adam_v.clear();
+    adam_v.extend_from_slice(&trainer.adam_v);
+
+    let n = valid_batch.len() as f32;
     (total_loss / n, total_acc / n)
 }
