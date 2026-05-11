@@ -1,22 +1,32 @@
-# vAGI-2 — CPU-First Ternary AGI Research Platform
+# vAGI-2 — Experimental CPU-First Ternary AI Research Workspace
 
-> A CPU-first artificial general intelligence research platform built in Rust,
-> featuring ternary weights {-1, 0, +1}, BPE tokenization, SIMD-accelerated inference,
-> and a multi-crate architecture spanning symbolic math, physics simulation,
-> hyperdimensional memory, sparse reasoning, and language modeling.
+> An experimental Rust workspace for exploring CPU-friendly language modeling
+> and agent-style components with ternary weights {-1, 0, +1}, SIMD kernels,
+> tokenization, and supporting crates for memory, reasoning, symbolic math,
+> and simulation.
 
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 
+## Project Status
+
+vAGI-2 is a research codebase, not a validated AGI system or production-ready model stack.
+The repository packages several ideas the project is experimenting with: ternary neural layers,
+CPU-oriented training paths, symbolic and physics-inspired modules, memory systems, and
+agent-style runtime loops. Some crates are more mature than others, and benchmark numbers in
+this repo should be treated as local measurements rather than universal expectations.
+
+---
+
 ## Highlights
 
-- **Ternary Weights** — All linear layers use {-1, 0, +1} weights via BitNet. Multiplications become additions, enabling CPU-efficient inference
-- **CPU-First Training** — f32 batch-parallel training with AdamW + exact attention gradients, achieving **150+ sequences/second** on commodity CPUs
-- **AVX2 SIMD** — Runtime-detected SIMD ternary kernels process 128 weights per instruction cycle
-- **BPE Tokenizer** — Byte-Pair Encoding with 2.6x compression ratio for Vietnamese text
-- **11 Crates** — Modular architecture: core engine, language model, math, physics, memory, reasoning, chat, and more
+- **Ternary weights** — The core linear layers and training utilities explore {-1, 0, +1} weight representations inspired by BitNet
+- **CPU-first focus** — The repo includes CPU-oriented training and inference paths, with local measurements for a tiny configuration around **150 sequences/second** on commodity hardware
+- **AVX2 kernels** — Runtime-detected SIMD kernels are included for packed ternary matrix-vector operations
+- **Vietnamese text tooling** — The language-model crate includes BPE tokenization and training scripts aimed at Vietnamese corpora
+- **Multi-crate workspace** — 11 crates cover the core engine, language model, memory, reasoning, world modeling, symbolic math, physics experiments, and chat utilities
 
 ---
 
@@ -25,7 +35,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     vagi-runtime                            │
-│                   (OODA loop agent)                         │
+│                 (agent runtime prototype)                   │
 ├──────────────┬──────────────┬──────────────┬────────────────┤
 │  vagi-reason │  vagi-world  │  vagi-train  │   vagi-chat    │
 │  (sparse MoE │ (causal DAG  │  (GENESIS    │  (multi-turn   │
@@ -52,16 +62,16 @@
 
 | Crate | Description |
 |-------|-------------|
-| **vagi-core** | BitNet ternary engine: 2-bit packed TernaryMatrix, mask-extract SIMD matvec, AVX2 ternary kernels, AdaptiveBasis activations, STE training |
-| **vagi-lm** | Transformer language model: RoPE attention, BPE tokenizer, f32 batch-parallel training, AdamW/SignSGD optimizers, checkpoint save/load |
+| **vagi-core** | Ternary engine: 2-bit packed TernaryMatrix, mask-extract SIMD matvec, AVX2 kernels, AdaptiveBasis activations, STE utilities |
+| **vagi-lm** | Transformer language model crate with RoPE attention, BPE tokenization, training loops, and checkpoint save/load |
 | **vagi-hdc** | 10,240-bit binary hypervectors, HDCMemory with SQLite persistence, top-K query, forgetting policy |
 | **vagi-math** | Symbolic algebra: Expr AST, rewrite engine, calculus, equation solver, proof chains |
-| **vagi-physics** | SI units, Hamiltonian Neural Networks, symmetry discovery, symbolic regression, microworlds |
+| **vagi-physics** | SI units, Hamiltonian neural-network experiments, symmetry discovery, symbolic regression, microworlds |
 | **vagi-train** | GENESIS 5-stage training protocol, JEPA embodiment, EWC regularization |
 | **vagi-memory** | StreamingState (5-level EMA, O(1)/token), TwoPhaseAttention (HDC scout + softmax) |
-| **vagi-reason** | Energy-based MoE routing, sparse expert compute (~95% sparsity) |
+| **vagi-reason** | Energy-based MoE routing and sparse expert execution |
 | **vagi-world** | Causal graph DAG, intervention analysis, A* goal-directed planner |
-| **vagi-runtime** | OODA loop agent: Observe → Orient → Decide → Act |
+| **vagi-runtime** | OODA-style runtime loop prototype |
 | **vagi-chat** | Multi-turn ChatSession, top-k/top-p sampling, repetition penalty |
 
 ---
@@ -97,13 +107,13 @@ This downloads Vietnamese sentence data to `data/vi_sentences.txt`.
 ### Train a Model
 
 ```bash
-# TINY model (460K params, ~150 sps on CPU)
+# TINY model (460K params, example local benchmark around 150 sps on CPU)
 cargo run --example train_cpu_beast -p vagi-lm --release -- --epochs 20 --batch 16
 
-# SMALL model (5M params, deeper training)
+# SMALL model (5M params)
 cargo run --example train_cpu_beast -p vagi-lm --release -- --small --epochs 20 --batch 8
 
-# BASE model (largest)
+# BASE model
 cargo run --example train_cpu_beast -p vagi-lm --release -- --base --epochs 10 --batch 4
 ```
 
@@ -132,31 +142,33 @@ cargo run --example chat_vi -p vagi-lm --release
 
 ## Training Pipeline
 
-The **CPU Beast** training pipeline (`train_cpu_beast`) combines three optimizations:
+The **CPU Beast** training pipeline (`train_cpu_beast`) combines three implementation choices:
 
 ### 1. BPE Tokenizer
 - Byte-Pair Encoding with configurable merge count (default: 1800 merges)
-- 2.6x compression: "thầy giảng bài hay" = 22 tokens vs 58 raw bytes
+- Example compression on Vietnamese text: "thầy giảng bài hay" = 22 tokens vs 58 raw bytes
 - Trained on corpus and persisted to `data/bpe_merges.txt`
 
 ### 2. f32 Batch-Parallel Training
-- Direct f32 matrix multiplication (no ternary quantization overhead during training)
+- Direct f32 matrix multiplication during training
 - Rayon-parallelized batch forward passes across CPU cores
-- Exact attention gradient backpropagation through softmax and Q/K/V
+- Attention-gradient backpropagation through softmax and Q/K/V in the current training path
 
 ### 3. AdamW Optimizer
 - Per-parameter adaptive learning rates
 - Cosine LR schedule with warmup
 - Weight decay regularization
 
-### Performance
+### Performance Notes
+
+The numbers below are example measurements from a tiny local configuration. They are useful as orientation, but not as guarantees for other hardware, datasets, or build settings.
 
 | Metric | TINY (d=64) | Notes |
 |--------|-------------|-------|
 | Speed | 150 sps | sequences per second |
 | Model size | 460K params | ~1.8 MB checkpoint |
 | BPE vocab | 2059 | 1800 merges |
-| AVX2 | Auto-detected | 128 weights/cycle |
+| AVX2 | Auto-detected | packed ternary matvec path |
 
 ---
 
@@ -165,7 +177,7 @@ The **CPU Beast** training pipeline (`train_cpu_beast`) combines three optimizat
 ### Ternary Engine (`vagi-core`)
 
 - **TernaryMatrix**: 2-bit packed storage (32 weights per u64, ~16x smaller than f32)
-- **Mask-extract matvec**: AVX2-accelerated, 3x speedup over scalar
+- **Mask-extract matvec**: AVX2-accelerated path with reported local speedups over scalar baselines
 - **AdaptiveBasis**: Learnable activations with 3 basis functions (identity + sin + tanh)
 - **STE Training**: Straight-through estimator for gradient flow through ternary quantization
 
@@ -257,19 +269,19 @@ vAGI-2/
 
 ## Design Principles
 
-1. **CPU-First** — No GPU required. Ternary weights turn multiplications into additions
-2. **Ternary Weights** — Strict {-1, 0, +1}. 2-bit packed storage, 16x memory reduction
-3. **Correct by Construction** — Hamiltonian dynamics conserve energy; symbolic proofs guarantee algebraic correctness
+1. **CPU-First** — Designed to run and be explored without requiring a GPU
+2. **Ternary Weights** — Strict {-1, 0, +1} experiments with 2-bit packed storage
+3. **Physics-aware and symbolic components** — The repo experiments with Hamiltonian dynamics, dimensional analysis, and symbolic manipulation where useful
 4. **Safe Rust** — No `unsafe` except where justified with documented invariants
 5. **Modular** — Each crate builds and tests independently
-6. **Sparse Compute** — ~5% of experts active per input, O(1) memory retrieval
+6. **Sparse Compute** — Several components explore sparse expert routing and constant-memory summaries
 
 ---
 
 ## Documentation
 
 - [Architecture Guide](docs/ARCHITECTURE.md) — Detailed system architecture
-- [Research Foundations](docs/RESEARCH.md) — Academic references and theoretical basis
+- [Research Notes](docs/RESEARCH.md) — References and implementation notes
 
 ---
 
